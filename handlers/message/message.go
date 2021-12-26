@@ -91,7 +91,7 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		webhookEvent := entry.Messaging[0]
 
 		fmt.Println("webhook event:")
-		fmt.Println(webhookEvent)
+		fmt.Printf("event: %+v", webhookEvent)
 
 		// Process webhook event here
 		// Get the sender PSID
