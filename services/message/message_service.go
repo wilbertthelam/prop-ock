@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/wilbertthelam/prop-ock/entities"
+	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 )
 
@@ -73,7 +74,7 @@ func (m *MessageService) SendAction(context echo.Context, action entities.Action
 func (m *MessageService) handleBiddingState(context echo.Context, action entities.Action, userId uuid.UUID, event interface{}) error {
 	switch action {
 	case entities.ACTION_SEND_MESSAGE:
-		message := event.(entities.MessengerWebhookMessageEvent)
+		message := event.(messenger_entities.WebhookMessageEvent)
 
 		// If the user is sending a bid, parse it for the bid value
 		if strings.HasPrefix(message.Message.Text, "bid") {

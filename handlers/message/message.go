@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/wilbertthelam/prop-ock/entities"
+	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
 	"github.com/wilbertthelam/prop-ock/secrets"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	callups_service "github.com/wilbertthelam/prop-ock/services/callups"
@@ -71,7 +71,7 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 	fmt.Println(context.Request().Body)
 	rawBody := context.Request().Body
 
-	var body entities.MessengerWebhookBody
+	var body messenger_entities.WebhookBody
 
 	err := json.NewDecoder(rawBody).Decode(&body)
 	if err != nil {
@@ -95,18 +95,24 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		// Process webhook event here
 		// Get the sender PSID
 		senderPsId := webhookEvent.Sender.Id
-		fmt.Println("sender PSID:")
+		fmt.Println("sender PsId:")
 		fmt.Println(senderPsId)
+
+		// Grab userId from the senderPsId
+		userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
+		if err != nil {
+			return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find user from senderPsId"))
+		}
 
 		// Check if the event is a message or postback or read and
 		// pass the event to the appropriate handler function
-		if (webhookEvent.Message == entities.MessengerWebhookMessageEvent{}) {
-			m.HandleMessengerWebhookMessage(context, senderPsId, webhookEvent.Message)
-		} else if (webhookEvent.Postback == entities.MessengerWebhookPostbackEvent{}) {
-			m.HandleMessengerWebhookPostback(context, senderPsId, webhookEvent.Postback)
-
-		} else if (webhookEvent.Read == entities.MessengerWebhookReadEvent{}) {
-			m.HandleMessengerWebhookRead(context, senderPsId, webhookEvent.Read)
+		if (webhookEvent.Message == messenger_entities.WebhookMessageEvent{}) {
+			m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
+			// m.HandleMessengerWebhookMessage(context, userId, webhookEvent.Message)
+		} else if (webhookEvent.Postback == messenger_entities.WebhookPostbackEvent{}) {
+			m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
+		} else if (webhookEvent.Read == messenger_entities.WebhookReadEvent{}) {
+			m.HandleMessengerWebhookRead(context, userId, webhookEvent.Read)
 		}
 
 		// Webhook event processed
@@ -117,103 +123,130 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 	return context.String(http.StatusOK, "EVENT_RECEIVED")
 }
 
-func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, senderPsId string, event entities.MessengerWebhookMessageEvent) error {
-	userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
-	if err != nil {
-		return nil
+func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookMessageEvent) error {
+	return m.messageService.SendAction(context, entities.ACTION_SEND_MESSAGE, userId, event)
+}
+
+func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookPostbackEvent) error {
+	senderPsId := "5332466926780473"
+	elements := []messenger_entities.TemplateElements{
+		{
+			Title:         "Julio Rodriguez",
+			ImageUrl:      "https://a.espncdn.com/combiner/i?img=/i/headshots/mlb/players/full/41044.png",
+			Subtitle:      "The best player ever",
+			DefaultAction: messenger_entities.TemplateDefaultAction{},
+		}, {
+			Title:         "Jarred Kelenic",
+			ImageUrl:      "https://a.espncdn.com/combiner/i?img=/i/headshots/mlb/players/full/41150.png",
+			Subtitle:      "The best player ever",
+			DefaultAction: messenger_entities.TemplateDefaultAction{},
+		},
+	}
+	// Create template
+	sendEvent := messenger_entities.SendEvent{
+		Recipient: messenger_entities.Id{
+			Id: senderPsId,
+		},
+		Message: messenger_entities.SendMessage{
+			Attachment: messenger_entities.Template{
+				Type: "template",
+				Payload: messenger_entities.TemplatePayload{
+					TemplateType: "generic",
+					Elements:     elements,
+				},
+			},
+		},
 	}
 
-	err = m.messageService.SendAction(context, entities.ACTION_SEND_MESSAGE, userId, event)
-	return nil
+	// m.auctionService.MakeBid(context, auctionId, userId, playerId, bid)
+	return context.JSON(http.StatusOK, sendEvent)
 }
 
-func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, senderPsId string, event entities.MessengerWebhookPostbackEvent) error {
-	return nil
-}
-
-func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, senderPsId string, event entities.MessengerWebhookReadEvent) error {
+func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookReadEvent) error {
 	return nil
 }
 
 func (m *MessageHandler) GetLatestMessage(context echo.Context) error {
-	auction, err := m.auctionService.CreateAuction(
-		context,
-		uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e"),
-		uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899"),
-		time.Now().UnixMilli(),
-		time.Now().Add(time.Duration(10)*time.Minute).UnixMilli(),
-	)
-	if err != nil {
-		fmt.Printf("error: failed to create auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
-
-	err = m.auctionService.StartAuction(context, auction.Id)
-	if err != nil {
-		fmt.Printf("error: failed to start auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
-
-	// err = m.auctionService.CloseAuction(context, auction.Id)
+	userId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
+	return m.HandleMessengerWebhookPostback(context, userId, messenger_entities.WebhookPostbackEvent{})
+	// auction, err := m.auctionService.CreateAuction(
+	// 	context,
+	// 	uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e"),
+	// 	uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899"),
+	// 	time.Now().UnixMilli(),
+	// 	time.Now().Add(time.Duration(10)*time.Minute).UnixMilli(),
+	// )
 	// if err != nil {
-	// 	fmt.Printf("error: failed to close auction %+v", err)
+	// 	fmt.Printf("error: failed to create auction %+v", err)
 	// 	return context.JSON(http.StatusNotFound, err.Error())
 	// }
 
-	// err = m.auctionService.ArchiveAuction(context, auction.Id)
+	// err = m.auctionService.StartAuction(context, auction.Id)
 	// if err != nil {
-	// 	fmt.Printf("error: failed to archive auction %+v", err)
+	// 	fmt.Printf("error: failed to start auction %+v", err)
 	// 	return context.JSON(http.StatusNotFound, err.Error())
 	// }
 
-	// return context.JSON(http.StatusOK, fmt.Sprintf("latest message - auctionId: %v", auction.Id.String()))
-	leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
-	user1Id := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
-	user2Id := uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")
+	// // err = m.auctionService.CloseAuction(context, auction.Id)
+	// // if err != nil {
+	// // 	fmt.Printf("error: failed to close auction %+v", err)
+	// // 	return context.JSON(http.StatusNotFound, err.Error())
+	// // }
 
-	err = m.userService.CreateUser(context, user1Id, "Fred Johnson")
-	if err != nil {
-		fmt.Printf("error: failed to create user %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// // err = m.auctionService.ArchiveAuction(context, auction.Id)
+	// // if err != nil {
+	// // 	fmt.Printf("error: failed to archive auction %+v", err)
+	// // 	return context.JSON(http.StatusNotFound, err.Error())
+	// // }
 
-	err = m.userService.CreateUser(context, user2Id, "Bobbi Draper")
-	if err != nil {
-		fmt.Printf("error: failed to create user %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// // return context.JSON(http.StatusOK, fmt.Sprintf("latest message - auctionId: %v", auction.Id.String()))
+	// leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
+	// user1Id := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
+	// user2Id := uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")
 
-	user1, err := m.userService.GetUserByUserId(context, user1Id)
-	if err != nil {
-		fmt.Printf("error: failed to get user %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// err = m.userService.CreateUser(context, user1Id, "Fred Johnson")
+	// if err != nil {
+	// 	fmt.Printf("error: failed to create user %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
 
-	_, err = m.userService.GetUserByUserId(context, user2Id)
-	if err != nil {
-		fmt.Printf("error: failed to get user %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// err = m.userService.CreateUser(context, user2Id, "Bobbi Draper")
+	// if err != nil {
+	// 	fmt.Printf("error: failed to create user %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
 
-	err = m.leagueService.CreateLeague(context, leagueId, "wilbert's league")
-	if err != nil {
-		fmt.Printf("error: failed to create league %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// user1, err := m.userService.GetUserByUserId(context, user1Id)
+	// if err != nil {
+	// 	fmt.Printf("error: failed to get user %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
 
-	err = m.userService.AddUserToLeague(context, user1Id, leagueId)
-	if err != nil {
-		fmt.Printf("error: failed to add user to league %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// _, err = m.userService.GetUserByUserId(context, user2Id)
+	// if err != nil {
+	// 	fmt.Printf("error: failed to get user %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
 
-	err = m.userService.AddUserToLeague(context, user2Id, leagueId)
-	if err != nil {
-		fmt.Printf("error: failed to add user to league %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+	// err = m.leagueService.CreateLeague(context, leagueId, "wilbert's league")
+	// if err != nil {
+	// 	fmt.Printf("error: failed to create league %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
 
-	return context.JSON(http.StatusOK, user1)
+	// err = m.userService.AddUserToLeague(context, user1Id, leagueId)
+	// if err != nil {
+	// 	fmt.Printf("error: failed to add user to league %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
+
+	// err = m.userService.AddUserToLeague(context, user2Id, leagueId)
+	// if err != nil {
+	// 	fmt.Printf("error: failed to add user to league %+v", err)
+	// 	return context.JSON(http.StatusNotFound, err.Error())
+	// }
+
+	// return context.JSON(http.StatusOK, user1)
 }
 
 // func (m *MessageHandler) SendMessage(context echo.Context) error {
