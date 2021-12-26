@@ -5,12 +5,14 @@ import (
 	redis_client "github.com/wilbertthelam/prop-ock/db"
 	"github.com/wilbertthelam/prop-ock/handlers/health"
 	"github.com/wilbertthelam/prop-ock/handlers/message"
+	"github.com/wilbertthelam/prop-ock/handlers/webview"
 	auction_repo "github.com/wilbertthelam/prop-ock/repos/auction"
 	league_repo "github.com/wilbertthelam/prop-ock/repos/league"
 	user_repo "github.com/wilbertthelam/prop-ock/repos/user"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	callups_service "github.com/wilbertthelam/prop-ock/services/callups"
 	league_service "github.com/wilbertthelam/prop-ock/services/league"
+	message_service "github.com/wilbertthelam/prop-ock/services/message"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
 )
 
@@ -54,16 +56,18 @@ func registerServices(modules DIModules) DIModules {
 	modules[user_service.GetName()] = user_service.New(
 		modules[user_repo.GetName()].(*user_repo.UserRepo),
 	)
-
-	modules[auction_service.GetName()] = auction_service.New(
-		modules[auction_repo.GetName()].(*auction_repo.AuctionRepo),
-		modules[user_service.GetName()].(*user_service.UserService),
-	)
 	modules[league_service.GetName()] = league_service.New(
 		modules[league_repo.GetName()].(*league_repo.LeagueRepo),
 	)
 	modules[callups_service.GetName()] = callups_service.New(
 		modules[redis_client.GetName()].(*redis.Client),
+	)
+	modules[auction_service.GetName()] = auction_service.New(
+		modules[auction_repo.GetName()].(*auction_repo.AuctionRepo),
+		modules[user_service.GetName()].(*user_service.UserService),
+	)
+	modules[message_service.GetName()] = message_service.New(
+		modules[auction_service.GetName()].(*auction_service.AuctionService),
 	)
 
 	return modules
@@ -72,11 +76,13 @@ func registerServices(modules DIModules) DIModules {
 // Add handlers to the DI registry
 func registerHandlers(modules DIModules) DIModules {
 	modules[health.GetName()] = health.New()
+	modules[webview.GetName()] = webview.New()
 	modules[message.GetName()] = message.New(
 		modules[auction_service.GetName()].(*auction_service.AuctionService),
 		modules[callups_service.GetName()].(*callups_service.CallupsService),
 		modules[user_service.GetName()].(*user_service.UserService),
 		modules[league_service.GetName()].(*league_service.LeagueService),
+		modules[message_service.GetName()].(*message_service.MessageService),
 	)
 
 	return modules

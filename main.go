@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/wilbertthelam/prop-ock/handlers/health"
 	"github.com/wilbertthelam/prop-ock/handlers/message"
+	"github.com/wilbertthelam/prop-ock/handlers/webview"
 )
 
 func main() {
@@ -28,6 +29,7 @@ func main() {
 
 	healthHandlerModule := modules[health.GetName()].(*health.HealthHandler)
 	messageHandlerModule := modules[message.GetName()].(*message.MessageHandler)
+	webviewHandlerModule := modules[webview.GetName()].(*webview.WebviewHandler)
 
 	// Routes
 	e.GET("/health", healthHandlerModule.GetHealthCheck)
@@ -35,6 +37,9 @@ func main() {
 	e.GET("/message/get-latest", messageHandlerModule.GetLatestMessage)
 	e.GET("/message/webhook", messageHandlerModule.VerifyMessengerWebhook)
 	e.POST("/message/webhook", messageHandlerModule.ProcessMessengerWebhook)
+
+	// Templates
+	e.GET("/webview/bid", webviewHandlerModule.RenderBid)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":" + port))

@@ -8,27 +8,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/wilbertthelam/prop-ock/entities"
 	"github.com/wilbertthelam/prop-ock/secrets"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	callups_service "github.com/wilbertthelam/prop-ock/services/callups"
 	league_service "github.com/wilbertthelam/prop-ock/services/league"
+	message_service "github.com/wilbertthelam/prop-ock/services/message"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
 )
-
-type MessengerWebhookBody struct {
-	Object string
-	Entry  []MessengerWebhookMessage
-}
-
-type MessengerWebhookMessage struct {
-	Messaging []interface{}
-}
 
 type MessageHandler struct {
 	auctionService *auction_service.AuctionService
 	callupsService *callups_service.CallupsService
 	userService    *user_service.UserService
 	leagueService  *league_service.LeagueService
+	messageService *message_service.MessageService
 }
 
 func New(
@@ -36,12 +30,14 @@ func New(
 	callupsService *callups_service.CallupsService,
 	userService *user_service.UserService,
 	leagueService *league_service.LeagueService,
+	messageService *message_service.MessageService,
 ) *MessageHandler {
 	return &MessageHandler{
 		auctionService,
 		callupsService,
 		userService,
 		leagueService,
+		messageService,
 	}
 }
 
@@ -75,7 +71,7 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 	fmt.Println(context.Request().Body)
 	rawBody := context.Request().Body
 
-	var body MessengerWebhookBody
+	var body entities.MessengerWebhookBody
 
 	err := json.NewDecoder(rawBody).Decode(&body)
 	if err != nil {
@@ -97,6 +93,21 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		fmt.Println(webhookEvent)
 
 		// Process webhook event here
+		// Get the sender PSID
+		senderPsId := webhookEvent.Sender.Id
+		fmt.Println("sender PSID:")
+		fmt.Println(senderPsId)
+
+		// Check if the event is a message or postback or read and
+		// pass the event to the appropriate handler function
+		if (webhookEvent.Message == entities.MessengerWebhookMessageEvent{}) {
+			m.HandleMessengerWebhookMessage(context, senderPsId, webhookEvent.Message)
+		} else if (webhookEvent.Postback == entities.MessengerWebhookPostbackEvent{}) {
+			m.HandleMessengerWebhookPostback(context, senderPsId, webhookEvent.Postback)
+
+		} else if (webhookEvent.Read == entities.MessengerWebhookReadEvent{}) {
+			m.HandleMessengerWebhookRead(context, senderPsId, webhookEvent.Read)
+		}
 
 		// Webhook event processed
 		fmt.Println("webhook event processed")
@@ -104,6 +115,24 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 
 	// Returns a '200 OK' response to all requests
 	return context.String(http.StatusOK, "EVENT_RECEIVED")
+}
+
+func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, senderPsId string, event entities.MessengerWebhookMessageEvent) error {
+	userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
+	if err != nil {
+		return nil
+	}
+
+	err = m.messageService.SendAction(context, entities.ACTION_SEND_MESSAGE, userId, event)
+	return nil
+}
+
+func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, senderPsId string, event entities.MessengerWebhookPostbackEvent) error {
+	return nil
+}
+
+func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, senderPsId string, event entities.MessengerWebhookReadEvent) error {
+	return nil
 }
 
 func (m *MessageHandler) GetLatestMessage(context echo.Context) error {

@@ -108,3 +108,11 @@ func (u *UserService) ValidateUserHasEnoughFunds(context echo.Context, userId uu
 
 	return wallet[leagueId] >= value, nil
 }
+
+func (u *UserService) GetUserIdFromSenderPsId(context echo.Context, senderPsId string) (uuid.UUID, error) {
+	return u.GetUserIdFromSenderPsId(context, senderPsId)
+}
+
+func (u *UserService) SetSenderPsIdToUserIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {
+	return u.SetSenderPsIdToUserIdRelationship(context, senderPsId, userId)
+}

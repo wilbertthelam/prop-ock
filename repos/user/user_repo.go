@@ -36,6 +36,10 @@ func generateLeagueMembersRelationshipKey(leagueId uuid.UUID) string {
 	return fmt.Sprintf("relationship:league_to_user:%v", leagueId.String())
 }
 
+func generateSenderPsIdToUserIdRedisKey(senderPsId string) string {
+	return fmt.Sprintf("relationship:sender_ps_id_to_user_id:%v", senderPsId)
+}
+
 func (u *UserRepo) GetUserByUserId(context echo.Context, userId uuid.UUID) (entities.User, error) {
 	redisUser, err := u.redisClient.HGetAll(
 		context.Request().Context(),
@@ -165,4 +169,35 @@ func (u *UserRepo) incrementWalletFund(context echo.Context, userId uuid.UUID, l
 		leagueId.String(),
 		value,
 	).Result()
+}
+
+func (u *UserRepo) GetUserIdFromSenderPsId(context echo.Context, senderPsId string) (uuid.UUID, error) {
+	userIdString, err := u.redisClient.Get(
+		context.Request().Context(),
+		generateSenderPsIdToUserIdRedisKey(senderPsId),
+	).Result()
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to get userId from senderPsId: %v", senderPsId)
+	}
+
+	userId, err := uuid.Parse(userIdString)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to parse userId: %v", userId)
+	}
+
+	return userId, nil
+}
+
+func (u *UserRepo) SetSenderPsIdToUserIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {
+	_, err := u.redisClient.Set(
+		context.Request().Context(),
+		generateSenderPsIdToUserIdRedisKey(senderPsId),
+		userId.String(),
+		0,
+	).Result()
+	if err != nil {
+		return fmt.Errorf("failed to set senderPsId to userId relationship: senderPsId: %v, userId: %v", senderPsId, userId)
+	}
+
+	return nil
 }
