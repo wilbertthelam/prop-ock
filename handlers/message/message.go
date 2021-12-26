@@ -64,7 +64,7 @@ func (m *MessageHandler) VerifyMessengerWebhook(context echo.Context) error {
 		fmt.Println("WEBHOOK_VERIFIED")
 
 		// Responds with the challenge token from the request
-		return context.JSON(http.StatusOK, challenge)
+		return context.String(http.StatusOK, challenge)
 	}
 
 	// Responds with '403 Forbidden' if verify tokens do not match
