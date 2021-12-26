@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/wilbertthelam/prop-ock/handlers/health"
@@ -9,6 +11,14 @@ import (
 
 func main() {
 	modules := LoadModules()
+
+	// Get Port
+	port := os.Getenv("PORT")
+
+	// If no port (local dev), default to 8000
+	if port == "" {
+		port = "8000"
+	}
 
 	e := echo.New()
 
@@ -27,5 +37,5 @@ func main() {
 	e.POST("/message/webhook", messageHandlerModule.ProcessMessengerWebhook)
 
 	// Start server
-	e.Logger.Fatal(e.Start(":8000"))
+	e.Logger.Fatal(e.Start(":" + port))
 }
