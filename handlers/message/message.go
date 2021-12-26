@@ -109,17 +109,26 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 
 		// Check if the event is a message or postback or read and
 		// pass the event to the appropriate handler function
-		if (webhookEvent.Message == messenger_entities.WebhookMessageEvent{}) {
-			m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
+		fmt.Println("webhookEventMessage:")
+		fmt.Println(webhookEvent.Message)
+
+		// Check
+		if (webhookEvent.Message != messenger_entities.WebhookMessageEvent{}) {
+			fmt.Println("entered message:")
+			err = m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
 			// m.HandleMessengerWebhookMessage(context, userId, webhookEvent.Message)
-		} else if (webhookEvent.Postback == messenger_entities.WebhookPostbackEvent{}) {
-			m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
-		} else if (webhookEvent.Read == messenger_entities.WebhookReadEvent{}) {
-			m.HandleMessengerWebhookRead(context, userId, webhookEvent.Read)
+		} else if (webhookEvent.Postback != messenger_entities.WebhookPostbackEvent{}) {
+			err = m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
+		} else if (webhookEvent.Read != messenger_entities.WebhookReadEvent{}) {
+			err = m.HandleMessengerWebhookRead(context, userId, webhookEvent.Read)
 		}
 
 		// Webhook event processed
 		fmt.Println("webhook event processed")
+	}
+
+	if err != nil {
+		return err
 	}
 
 	// Returns a '200 OK' response to all requests
@@ -165,6 +174,11 @@ func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, us
 
 	postURL := "https://graph.facebook.com/v12.0/me/messages?access_token=EAAILfjDbBscBACZAoKJImWXQHrGvEPoMCFrnedTZCbSyDqaAyNA8AKtJh5v1WOddsTs6gcYU8Xd6x5ORwfotEFMA1YZCeiEVBrvtXxZCZBhbFufFg3YLsjhV9L2H7QZAtAcPxNTZB7GsphUDn7a920FGG3cK4u3WwBwGksKieuiNxZCQK0ESLz8X"
 	resp, err := http.Post(postURL, "application/json", bytes.NewBuffer(sentEventJSON))
+
+	fmt.Println("resp:")
+	fmt.Println(resp)
+	fmt.Println(err)
+
 	if err != nil {
 		// handle error
 		return context.JSON(http.StatusNotFound, err.Error())
