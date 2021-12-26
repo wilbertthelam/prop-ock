@@ -98,11 +98,13 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		fmt.Println("sender PsId:")
 		fmt.Println(senderPsId)
 
-		// Grab userId from the senderPsId
-		userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
-		if err != nil {
-			return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find user from senderPsId"))
-		}
+		// // Grab userId from the senderPsId
+		// userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
+		// if err != nil {
+		// 	return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find user from senderPsId"))
+		// }
+
+		userId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
 
 		// Check if the event is a message or postback or read and
 		// pass the event to the appropriate handler function
