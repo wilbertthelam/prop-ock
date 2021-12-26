@@ -1,6 +1,7 @@
 package message
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -160,8 +161,19 @@ func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, us
 		},
 	}
 
+	sentEventJSON, _ := json.Marshal(sendEvent)
+
+	postURL := "https://graph.facebook.com/v12.0/me/messages?access_token=EAAILfjDbBscBACZAoKJImWXQHrGvEPoMCFrnedTZCbSyDqaAyNA8AKtJh5v1WOddsTs6gcYU8Xd6x5ORwfotEFMA1YZCeiEVBrvtXxZCZBhbFufFg3YLsjhV9L2H7QZAtAcPxNTZB7GsphUDn7a920FGG3cK4u3WwBwGksKieuiNxZCQK0ESLz8X"
+	resp, err := http.Post(postURL, "application/json", bytes.NewBuffer(sentEventJSON))
+	if err != nil {
+		// handle error
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+	defer resp.Body.Close()
+	return nil
+
 	// m.auctionService.MakeBid(context, auctionId, userId, playerId, bid)
-	return context.JSON(http.StatusOK, sendEvent)
+	// return context.JSON(http.StatusOK, sendEvent)
 }
 
 func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookReadEvent) error {
