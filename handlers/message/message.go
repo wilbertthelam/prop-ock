@@ -103,7 +103,7 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 	}
 
 	// Returns a '200 OK' response to all requests
-	return context.JSON(http.StatusOK, "EVENT_RECEIVED")
+	return context.String(http.StatusOK, "EVENT_RECEIVED")
 }
 
 func (m *MessageHandler) GetLatestMessage(context echo.Context) error {
