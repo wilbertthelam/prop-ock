@@ -2,6 +2,7 @@ package user_service
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -27,7 +28,41 @@ func (u *UserService) GetUserByUserId(context echo.Context, userId uuid.UUID) (e
 	return u.userRepo.GetUserByUserId(context, userId)
 }
 
-func (u *UserService) CreateUser(context echo.Context, userId uuid.UUID, name string) error {
+func (u *UserService) InitializeUserAndJoinLeague(context echo.Context, leagueId uuid.UUID, userId uuid.UUID, senderPsId string, name string) error {
+	// Check if account was already created for new user
+	checkedUserId, err := u.GetUserIdFromSenderPsId(context, senderPsId)
+	if err == nil || checkedUserId != uuid.Nil {
+		return fmt.Errorf("user already mapped: senderPsId: %v, userId: %v, error: %+v", senderPsId, userId, err)
+	}
+
+	// TODO: Create Redis transaction here
+
+	err = u.createUser(context, userId, "[add name]")
+	if err != nil {
+		return context.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	// Create senderPsId <> userId mappings in both directions
+	err = u.SetUserIdToSenderPsIdRelationship(context, senderPsId, userId)
+	if err != nil {
+		return err
+	}
+
+	err = u.SetSenderPsIdToUserIdRelationship(context, senderPsId, userId)
+	if err != nil {
+		return err
+	}
+
+	// Join the league
+	err = u.AddUserToLeague(context, userId, leagueId)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *UserService) createUser(context echo.Context, userId uuid.UUID, name string) error {
 	// Verify user isn't already created
 	user, err := u.GetUserByUserId(context, userId)
 	if err != nil {

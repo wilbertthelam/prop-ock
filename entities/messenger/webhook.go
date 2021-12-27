@@ -28,7 +28,17 @@ type WebhookMessage struct {
 	Text string
 }
 
-type WebhookPostbackEvent struct{}
+type WebhookPostbackEvent struct {
+	Sender    Id
+	Recipient Id
+	Timestamp int64
+	Postback  WebhookPostback
+}
+
+type WebhookPostback struct {
+	Title   string
+	Payload string
+}
 
 type WebhookReadEvent struct{}
 

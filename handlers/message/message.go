@@ -110,13 +110,18 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		// Check if the event is a message or postback or read and
 		// pass the event to the appropriate handler function
 		fmt.Println("webhookEventMessage:")
-		fmt.Println(webhookEvent.Message)
+		fmt.Printf("%+v", webhookEvent.Message)
+
+		fmt.Println()
+		fmt.Println("webhookEventPostback:")
+		fmt.Printf("%+v", webhookEvent.Postback)
 
 		// Check
 		if (webhookEvent.Message != messenger_entities.WebhookMessageEvent{}) {
 			fmt.Println("entered message:")
 			m.HandleMessengerWebhookMessage(context, userId, webhookEvent.Message)
 		} else if (webhookEvent.Postback != messenger_entities.WebhookPostbackEvent{}) {
+			fmt.Println("entered postback:")
 			err = m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
 		} else if (webhookEvent.Read != messenger_entities.WebhookReadEvent{}) {
 			err = m.HandleMessengerWebhookRead(context, userId, webhookEvent.Read)
@@ -139,7 +144,17 @@ func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, use
 }
 
 func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookPostbackEvent) error {
+	// Chest Postback type
+	if event.Postback.Payload == "user_joined" {
+		// Initialize new userId
+		userId := uuid.New()
+		leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
 
+		err := m.userService.InitializeUserAndJoinLeague(context, leagueId, userId, event.Sender.Id, "[add-name]")
+		if err != nil {
+			return context.JSON(http.StatusInternalServerError, err.Error())
+		}
+	}
 	// m.auctionService.MakeBid(context, auctionId, userId, playerId, bid)
 	return context.JSON(http.StatusOK, "ok")
 }
@@ -180,7 +195,19 @@ func (m *MessageHandler) SendPlayersBidTemplateEvents(context echo.Context, auct
 
 func (m *MessageHandler) GetLatestMessage(context echo.Context) error {
 	userId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
-	return m.HandleMessengerWebhookPostback(context, userId, messenger_entities.WebhookPostbackEvent{})
+	return m.HandleMessengerWebhookPostback(
+		context,
+		userId,
+		messenger_entities.WebhookPostbackEvent{
+			Sender: messenger_entities.Id{
+				Id: "peepee",
+			},
+			Postback: messenger_entities.WebhookPostback{
+				Payload: "user_joined",
+			},
+		},
+	)
+
 	// auction, err := m.auctionService.CreateAuction(
 	// 	context,
 	// 	uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e"),
