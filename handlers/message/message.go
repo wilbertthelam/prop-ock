@@ -115,8 +115,7 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		// Check
 		if (webhookEvent.Message != messenger_entities.WebhookMessageEvent{}) {
 			fmt.Println("entered message:")
-			err = m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
-			// m.HandleMessengerWebhookMessage(context, userId, webhookEvent.Message)
+			m.HandleMessengerWebhookMessage(context, userId, webhookEvent.Message)
 		} else if (webhookEvent.Postback != messenger_entities.WebhookPostbackEvent{}) {
 			err = m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
 		} else if (webhookEvent.Read != messenger_entities.WebhookReadEvent{}) {
@@ -140,57 +139,42 @@ func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, use
 }
 
 func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookPostbackEvent) error {
-	senderPsId := "5332466926780473"
-	elements := []messenger_entities.TemplateElements{
-		{
-			Title:         "Julio Rodriguez",
-			ImageUrl:      "https://a.espncdn.com/combiner/i?img=/i/headshots/mlb/players/full/41044.png",
-			Subtitle:      "The best player ever",
-			DefaultAction: messenger_entities.TemplateDefaultAction{},
-		}, {
-			Title:         "Jarred Kelenic",
-			ImageUrl:      "https://a.espncdn.com/combiner/i?img=/i/headshots/mlb/players/full/41150.png",
-			Subtitle:      "The best player ever",
-			DefaultAction: messenger_entities.TemplateDefaultAction{},
-		},
-	}
-	// Create template
-	sendEvent := messenger_entities.SendEvent{
-		Recipient: messenger_entities.Id{
-			Id: senderPsId,
-		},
-		Message: messenger_entities.SendMessage{
-			Attachment: messenger_entities.Template{
-				Type: "template",
-				Payload: messenger_entities.TemplatePayload{
-					TemplateType: "generic",
-					Elements:     elements,
-				},
-			},
-		},
-	}
-
-	sentEventJSON, _ := json.Marshal(sendEvent)
-
-	postURL := "https://graph.facebook.com/v12.0/me/messages?access_token=EAAILfjDbBscBACZAoKJImWXQHrGvEPoMCFrnedTZCbSyDqaAyNA8AKtJh5v1WOddsTs6gcYU8Xd6x5ORwfotEFMA1YZCeiEVBrvtXxZCZBhbFufFg3YLsjhV9L2H7QZAtAcPxNTZB7GsphUDn7a920FGG3cK4u3WwBwGksKieuiNxZCQK0ESLz8X"
-	resp, err := http.Post(postURL, "application/json", bytes.NewBuffer(sentEventJSON))
-
-	fmt.Println("resp:")
-	fmt.Println(resp)
-	fmt.Println(err)
-
-	if err != nil {
-		// handle error
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
-	defer resp.Body.Close()
-	return nil
 
 	// m.auctionService.MakeBid(context, auctionId, userId, playerId, bid)
-	// return context.JSON(http.StatusOK, sendEvent)
+	return context.JSON(http.StatusOK, "ok")
 }
 
 func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookReadEvent) error {
+	return nil
+}
+
+func (m *MessageHandler) SendMessage(context echo.Context) error {
+	auctionId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
+	return m.SendPlayersBidTemplateEvents(context, auctionId)
+}
+
+func (m *MessageHandler) SendPlayersBidTemplateEvents(context echo.Context, auctionId uuid.UUID) error {
+	sendEvents, err := m.auctionService.CreateBidsForAuction(context, auctionId)
+	if err != nil {
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	for _, sendEvent := range sendEvents {
+		sentEventJSON, _ := json.Marshal(sendEvent)
+
+		postURL := fmt.Sprintf("https://graph.facebook.com/v12.0/me/messages?access_token=%v", secrets.MESSENGER_ACCESS_TOKEN)
+		resp, err := http.Post(postURL, "application/json", bytes.NewBuffer(sentEventJSON))
+
+		context.Logger().Debugf("response: %+v, error: %+v", resp, err)
+
+		if err != nil {
+			// handle error
+			return context.JSON(http.StatusNotFound, err.Error())
+		}
+
+		defer resp.Body.Close()
+	}
+
 	return nil
 }
 
@@ -282,62 +266,62 @@ func (m *MessageHandler) GetLatestMessage(context echo.Context) error {
 
 // }
 
-func (m *MessageHandler) SendMessage(context echo.Context) error {
-	leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
-	user1Id := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
-	user2Id := uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")
-	playerId := "12345-julio-rodriguez"
-	auctionId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
+// func (m *MessageHandler) SendMessage(context echo.Context) error {
+// 	leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
+// 	user1Id := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
+// 	user2Id := uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")
+// 	playerId := "12345-julio-rodriguez"
+// 	auctionId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
 
-	updatedWallet, err := m.userService.AddFundsToUserWallet(context, user1Id, leagueId, 100)
-	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	updatedWallet, err := m.userService.AddFundsToUserWallet(context, user1Id, leagueId, 100)
+// 	if err != nil {
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	fmt.Println(updatedWallet)
+// 	fmt.Println(updatedWallet)
 
-	updatedWallet, err = m.userService.RemoveFundsFromUserWallet(context, user1Id, leagueId, 25)
-	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	updatedWallet, err = m.userService.RemoveFundsFromUserWallet(context, user1Id, leagueId, 25)
+// 	if err != nil {
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	fmt.Println(updatedWallet)
+// 	fmt.Println(updatedWallet)
 
-	updatedWallet, err = m.userService.AddFundsToUserWallet(context, user1Id, leagueId, 50)
-	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	updatedWallet, err = m.userService.AddFundsToUserWallet(context, user1Id, leagueId, 50)
+// 	if err != nil {
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	fmt.Println(updatedWallet)
+// 	fmt.Println(updatedWallet)
 
-	updatedWallet, err = m.userService.AddFundsToUserWallet(context, user2Id, leagueId, 500)
-	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	updatedWallet, err = m.userService.AddFundsToUserWallet(context, user2Id, leagueId, 500)
+// 	if err != nil {
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	err = m.auctionService.MakeBid(context, auctionId, user1Id, playerId, 50)
-	if err != nil {
-		fmt.Printf("error: failed to make bid for user %+v: ", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	err = m.auctionService.MakeBid(context, auctionId, user1Id, playerId, 50)
+// 	if err != nil {
+// 		fmt.Printf("error: failed to make bid for user %+v: ", err)
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	err = m.auctionService.MakeBid(context, auctionId, user2Id, playerId, 100)
-	if err != nil {
-		fmt.Printf("error: failed to make bid for user %+v: ", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	err = m.auctionService.MakeBid(context, auctionId, user2Id, playerId, 100)
+// 	if err != nil {
+// 		fmt.Printf("error: failed to make bid for user %+v: ", err)
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	err = m.auctionService.MakeBid(context, auctionId, user2Id, playerId, 150)
-	if err != nil {
-		fmt.Printf("error: failed to make bid for user %+v: ", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	err = m.auctionService.MakeBid(context, auctionId, user2Id, playerId, 150)
+// 	if err != nil {
+// 		fmt.Printf("error: failed to make bid for user %+v: ", err)
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	err = m.auctionService.CancelBid(context, auctionId, user1Id, playerId)
-	if err != nil {
-		fmt.Printf("error: failed to cancel bid for user %+v: ", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// 	err = m.auctionService.CancelBid(context, auctionId, user1Id, playerId)
+// 	if err != nil {
+// 		fmt.Printf("error: failed to cancel bid for user %+v: ", err)
+// 		return context.JSON(http.StatusNotFound, err.Error())
+// 	}
 
-	return context.JSON(http.StatusOK, updatedWallet)
-}
+// 	return context.JSON(http.StatusOK, updatedWallet)
+// }

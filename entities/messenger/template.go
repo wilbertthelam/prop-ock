@@ -11,16 +11,18 @@ type TemplatePayload struct {
 }
 
 type TemplateElements struct {
-	Title         string                `json:"title,omitempty"`
-	ImageUrl      string                `json:"image_url,omitempty"`
-	Subtitle      string                `json:"subtitle,omitempty"`
-	DefaultAction TemplateDefaultAction `json:"default_action,omitempty"`
+	Title    string `json:"title,omitempty"`
+	ImageUrl string `json:"image_url,omitempty"`
+	Subtitle string `json:"subtitle,omitempty"`
+	// DefaultAction TemplateDefaultAction   `json:"default_action,omitempty"`
+	Buttons []TemplateDefaultAction `json:"buttons,omitempty"`
 }
 
 type TemplateDefaultAction struct {
 	Type               string `json:"type,omitempty"`
 	Url                string `json:"url,omitempty"`
 	WebviewHeightRatio string `json:"webview_height_ratio,omitempty"`
+	Title              string `json:"title,omitempty"`
 }
 
 type TemplateButton struct {

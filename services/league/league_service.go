@@ -27,6 +27,11 @@ func (l *LeagueService) GetLeagueByLeagueId(context echo.Context, leagueId uuid.
 	return l.leagueRepo.GetLeagueByLeagueId(context, leagueId)
 }
 
+// TODO: create members
+func (l *LeagueService) GetMembersInLeague(context echo.Context, leagueId uuid.UUID) ([]uuid.UUID, error) {
+	return []uuid.UUID{uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9"), uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")}, nil
+}
+
 func (l *LeagueService) CreateLeague(context echo.Context, leagueId uuid.UUID, name string) error {
 	// Verify league isn't already created
 	league, err := l.GetLeagueByLeagueId(context, leagueId)

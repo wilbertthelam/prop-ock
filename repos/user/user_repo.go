@@ -40,6 +40,10 @@ func generateSenderPsIdToUserIdRedisKey(senderPsId string) string {
 	return fmt.Sprintf("relationship:sender_ps_id_to_user_id:%v", senderPsId)
 }
 
+func generateUserIdToSenderPsIdRedisKey(userId uuid.UUID) string {
+	return fmt.Sprintf("relationship:user_id_to_sender_ps_id:%v", userId.String())
+}
+
 func (u *UserRepo) GetUserByUserId(context echo.Context, userId uuid.UUID) (entities.User, error) {
 	redisUser, err := u.redisClient.HGetAll(
 		context.Request().Context(),
@@ -188,6 +192,18 @@ func (u *UserRepo) GetUserIdFromSenderPsId(context echo.Context, senderPsId stri
 	return userId, nil
 }
 
+func (u *UserRepo) GetSenderPsIdFromUserId(context echo.Context, userId uuid.UUID) (string, error) {
+	senderPsId, err := u.redisClient.Get(
+		context.Request().Context(),
+		generateUserIdToSenderPsIdRedisKey(userId),
+	).Result()
+	if err != nil {
+		return "", fmt.Errorf("failed to get senderPsId from userId: %v", userId)
+	}
+
+	return senderPsId, nil
+}
+
 func (u *UserRepo) SetSenderPsIdToUserIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {
 	_, err := u.redisClient.Set(
 		context.Request().Context(),
@@ -197,6 +213,20 @@ func (u *UserRepo) SetSenderPsIdToUserIdRelationship(context echo.Context, sende
 	).Result()
 	if err != nil {
 		return fmt.Errorf("failed to set senderPsId to userId relationship: senderPsId: %v, userId: %v", senderPsId, userId)
+	}
+
+	return nil
+}
+
+func (u *UserRepo) SetUserIdToSenderPsIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {
+	_, err := u.redisClient.Set(
+		context.Request().Context(),
+		generateUserIdToSenderPsIdRedisKey(userId),
+		senderPsId,
+		0,
+	).Result()
+	if err != nil {
+		return fmt.Errorf("failed to set userId to senderPsId relationship: senderPsId: %v, userId: %v", senderPsId, userId)
 	}
 
 	return nil

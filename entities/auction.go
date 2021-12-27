@@ -19,11 +19,12 @@ const (
 )
 
 type Auction struct {
-	Id        uuid.UUID
-	LeagueId  uuid.UUID
-	StartTime int64
-	EndTime   int64
-	Status    AuctionStatus
-	Name      string
-	Notes     string
+	Id          uuid.UUID
+	LeagueId    uuid.UUID
+	PlayerSetId uuid.UUID
+	StartTime   int64
+	EndTime     int64
+	Status      AuctionStatus
+	Name        string
+	Notes       string
 }

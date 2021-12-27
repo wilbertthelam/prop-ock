@@ -6,19 +6,31 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/wilbertthelam/prop-ock/entities"
+	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
 	auction_repo "github.com/wilbertthelam/prop-ock/repos/auction"
+	league_service "github.com/wilbertthelam/prop-ock/services/league"
+	player_service "github.com/wilbertthelam/prop-ock/services/player"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
 )
 
 type AuctionService struct {
-	auctionRepo *auction_repo.AuctionRepo
-	userService *user_service.UserService
+	auctionRepo   *auction_repo.AuctionRepo
+	userService   *user_service.UserService
+	playerService *player_service.PlayerService
+	leagueService *league_service.LeagueService
 }
 
-func New(auctionRepo *auction_repo.AuctionRepo, userService *user_service.UserService) *AuctionService {
+func New(
+	auctionRepo *auction_repo.AuctionRepo,
+	userService *user_service.UserService,
+	playerService *player_service.PlayerService,
+	leagueService *league_service.LeagueService,
+) *AuctionService {
 	return &AuctionService{
 		auctionRepo,
 		userService,
+		playerService,
+		leagueService,
 	}
 }
 
@@ -43,6 +55,10 @@ func (a *AuctionService) PlaceBid(context echo.Context, leagueId uuid.UUID, play
 	// Send bid into Redis
 
 	return nil
+}
+
+func (a *AuctionService) GetAuctionByAuctionId(context echo.Context, auctionId uuid.UUID) (entities.Auction, error) {
+	return a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 }
 
 func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID, leagueId uuid.UUID, startTime int64, endTime int64) (entities.Auction, error) {
@@ -187,4 +203,96 @@ func (a *AuctionService) ValidateAuctionIsOpen(context echo.Context, auctionId u
 	}
 
 	return auction.Status == entities.AUCTION_STATUS_ACTIVE, nil
+}
+
+func (a *AuctionService) CreateBidsForAuction(context echo.Context, auctionId uuid.UUID) ([]messenger_entities.SendEvent, error) {
+	auction, err := a.GetAuctionByAuctionId(context, auctionId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect all the users in the auction
+	userIds, err := a.leagueService.GetMembersInLeague(context, auction.LeagueId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get senderPsIds from the userIds
+	senderPsIds := make([]string, len(userIds))
+	for index, userId := range userIds {
+		senderPsId, err := a.userService.GetSenderPsIdFromUserId(context, userId)
+		if err != nil {
+			return nil, err
+		}
+
+		senderPsIds[index] = senderPsId
+	}
+
+	// Get all playerIds from the auction's player set
+	// TODO: create player set endpoint
+	playerIds := []string{
+		"44-julio-rodriguez",
+		"7-jarred-kelenic",
+		"13-bobby-witt",
+	}
+
+	// Create player bid template item for each player
+	playerBidTemplateElements, err := a.CreatePlayerBidTemplateElements(context, playerIds)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.CreatePlayerBidEvents(context, senderPsIds, playerBidTemplateElements)
+}
+
+func (a *AuctionService) CreatePlayerBidEvents(context echo.Context, senderPsIds []string, playerBidTemplateEvents []messenger_entities.TemplateElements) ([]messenger_entities.SendEvent, error) {
+	events := make([]messenger_entities.SendEvent, len(senderPsIds))
+	for index, senderPsId := range senderPsIds {
+		sendEvent := messenger_entities.SendEvent{
+			Recipient: messenger_entities.Id{
+				Id: senderPsId,
+			},
+			Message: messenger_entities.SendMessage{
+				Attachment: messenger_entities.Template{
+					Type: "template",
+					Payload: messenger_entities.TemplatePayload{
+						TemplateType: "generic",
+						Elements:     playerBidTemplateEvents,
+					},
+				},
+			},
+		}
+
+		events[index] = sendEvent
+	}
+
+	return events, nil
+}
+
+func (a *AuctionService) CreatePlayerBidTemplateElements(context echo.Context, playerIds []string) ([]messenger_entities.TemplateElements, error) {
+	templateElements := make([]messenger_entities.TemplateElements, len(playerIds))
+	for index, playerId := range playerIds {
+		player, err := a.playerService.GetPlayerByPlayerId(context, playerId)
+		if err != nil {
+			return nil, err
+		}
+
+		templateElement := messenger_entities.TemplateElements{
+			Title:    player.Name,
+			ImageUrl: player.Image,
+			Subtitle: fmt.Sprintf("%v | %v", player.Team, player.Position),
+			Buttons: []messenger_entities.TemplateDefaultAction{
+				{
+					Type:               "web_url",
+					Url:                "http://fantasy.wilbs.org/webview/bin",
+					WebviewHeightRatio: "COMPACT",
+					Title:              "Place bid",
+				},
+			},
+		}
+
+		templateElements[index] = templateElement
+	}
+
+	return templateElements, nil
 }

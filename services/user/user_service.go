@@ -110,9 +110,23 @@ func (u *UserService) ValidateUserHasEnoughFunds(context echo.Context, userId uu
 }
 
 func (u *UserService) GetUserIdFromSenderPsId(context echo.Context, senderPsId string) (uuid.UUID, error) {
-	return u.GetUserIdFromSenderPsId(context, senderPsId)
+	return u.userRepo.GetUserIdFromSenderPsId(context, senderPsId)
 }
 
 func (u *UserService) SetSenderPsIdToUserIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {
-	return u.SetSenderPsIdToUserIdRelationship(context, senderPsId, userId)
+	return u.userRepo.SetSenderPsIdToUserIdRelationship(context, senderPsId, userId)
+}
+
+func (u *UserService) GetSenderPsIdFromUserId(context echo.Context, userId uuid.UUID) (string, error) {
+	if userId == uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9") {
+		return "5332466926780473", nil
+	} else if userId == uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed") {
+		return "4928500810545820", nil
+	}
+	// return u.userRepo.GetSenderPsIdFromUserId(context, userId)
+	return "", nil
+}
+
+func (u *UserService) SetUserIdToSenderPsIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {
+	return u.userRepo.SetUserIdToSenderPsIdRelationship(context, senderPsId, userId)
 }

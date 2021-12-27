@@ -33,7 +33,7 @@ func main() {
 
 	// Routes
 	e.GET("/health", healthHandlerModule.GetHealthCheck)
-	e.GET("/message/send", messageHandlerModule.SendMessage)
+	e.GET("/message/send/auction", messageHandlerModule.SendMessage)
 	e.GET("/message/get-latest", messageHandlerModule.GetLatestMessage)
 	e.GET("/message/webhook", messageHandlerModule.VerifyMessengerWebhook)
 	e.POST("/message/webhook", messageHandlerModule.ProcessMessengerWebhook)
