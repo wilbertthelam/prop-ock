@@ -19,15 +19,9 @@ type TemplateElements struct {
 }
 
 type TemplateDefaultAction struct {
-	Type               string `json:"type,omitempty"`
-	Url                string `json:"url,omitempty"`
-	WebviewHeightRatio string `json:"webview_height_ratio,omitempty"`
-	Title              string `json:"title,omitempty"`
-}
-
-type TemplateButton struct {
-	Type    string      `json:"type,omitempty"`
-	Url     string      `json:"url,omitempty"`
-	Title   string      `json:"title,omitempty"`
-	Payload interface{} `json:"payload,omitempty"`
+	Type               string      `json:"type,omitempty"`
+	Url                string      `json:"url,omitempty"`
+	WebviewHeightRatio string      `json:"webview_height_ratio,omitempty"`
+	Title              string      `json:"title,omitempty"`
+	Payload            interface{} `json:"payload,omitempty"`
 }

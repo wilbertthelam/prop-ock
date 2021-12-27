@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/wilbertthelam/prop-ock/constants"
 	"github.com/wilbertthelam/prop-ock/entities"
 	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
 	"github.com/wilbertthelam/prop-ock/secrets"
@@ -69,12 +71,9 @@ func (m *MessageHandler) VerifyMessengerWebhook(context echo.Context) error {
 }
 
 func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
-	fmt.Println(context.Request().Body)
-	rawBody := context.Request().Body
-
 	var body messenger_entities.WebhookBody
 
-	err := json.NewDecoder(rawBody).Decode(&body)
+	err := json.NewDecoder(context.Request().Body).Decode(&body)
 	if err != nil {
 		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode body"))
 	}
@@ -90,41 +89,21 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		// will only ever contain one message, so we get index 0
 		webhookEvent := entry.Messaging[0]
 
-		fmt.Println("webhook event:")
-		fmt.Printf("event: %+v", webhookEvent)
+		context.Logger().Infof("webhook event: %+v", webhookEvent)
 
 		// Process webhook event here
 		// Get the sender PSID
 		senderPsId := webhookEvent.Sender.Id
-		fmt.Println("sender PsId:")
-		fmt.Println(senderPsId)
-
-		// // Grab userId from the senderPsId
-		// userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
-		// if err != nil {
-		// 	return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find user from senderPsId"))
-		// }
-
-		userId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
+		context.Logger().Infof("senderPsId: %v", senderPsId)
 
 		// Check if the event is a message or postback or read and
 		// pass the event to the appropriate handler function
-		fmt.Println("webhookEventMessage:")
-		fmt.Printf("%+v", webhookEvent.Message)
-
-		fmt.Println()
-		fmt.Println("webhookEventPostback:")
-		fmt.Printf("%+v", webhookEvent.Postback)
-
-		// Check
-		if (webhookEvent.Message != messenger_entities.WebhookMessageEvent{}) {
-			fmt.Println("entered message:")
-			m.HandleMessengerWebhookMessage(context, userId, webhookEvent.Message)
-		} else if (webhookEvent.Postback != messenger_entities.WebhookPostbackEvent{}) {
-			fmt.Println("entered postback:")
-			err = m.HandleMessengerWebhookPostback(context, userId, webhookEvent.Postback)
-		} else if (webhookEvent.Read != messenger_entities.WebhookReadEvent{}) {
-			err = m.HandleMessengerWebhookRead(context, userId, webhookEvent.Read)
+		if (webhookEvent.Message != messenger_entities.WebhookMessage{}) {
+			err = m.HandleMessengerWebhookMessage(context, senderPsId, webhookEvent.Message)
+		} else if (webhookEvent.Postback != messenger_entities.WebhookPostback{}) {
+			err = m.HandleMessengerWebhookPostback(context, senderPsId, webhookEvent.Postback)
+		} else if (webhookEvent.Read != messenger_entities.WebhookRead{}) {
+			err = m.HandleMessengerWebhookRead(context, senderPsId, webhookEvent.Read)
 		}
 
 		// Webhook event processed
@@ -132,40 +111,69 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 	}
 
 	if err != nil {
-		return err
+		context.Logger().Errorf("webhook processing error: %+v", err.Error())
+		return context.JSON(http.StatusInternalServerError, err.Error())
 	}
 
 	// Returns a '200 OK' response to all requests
 	return context.String(http.StatusOK, "EVENT_RECEIVED")
 }
 
-func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookMessageEvent) error {
+func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, senderPsId string, event messenger_entities.WebhookMessage) error {
+	// Grab userId from the senderPsId
+	userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
+	if err != nil {
+		return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find user from senderPsId"))
+	}
+
 	return m.messageService.SendAction(context, entities.ACTION_SEND_MESSAGE, userId, event)
 }
 
-func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookPostbackEvent) error {
+func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, senderPsId string, event messenger_entities.WebhookPostback) error {
 	// Chest Postback type
-	if event.Postback.Payload == "user_joined" {
+
+	// New user initialization type
+	switch event.Payload {
+	case "user_joined":
 		// Initialize new userId
 		userId := uuid.New()
-		leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
+		leagueId := constants.LEAGUE_ID
 
-		err := m.userService.InitializeUserAndJoinLeague(context, leagueId, userId, event.Sender.Id, "[add-name]")
+		err := m.userService.InitializeUser(context, userId, senderPsId, "[add-name]")
 		if err != nil {
-			return context.JSON(http.StatusInternalServerError, err.Error())
+			// TODO: figure out what to do if initialization fails
+			return err
 		}
+
+		// Join the league
+		err = m.leagueService.AddUserToLeague(context, userId, leagueId)
+		if err != nil {
+			return err
+		}
+
+		break
 	}
-	// m.auctionService.MakeBid(context, auctionId, userId, playerId, bid)
-	return context.JSON(http.StatusOK, "ok")
+
+	return nil
 }
 
-func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, userId uuid.UUID, event messenger_entities.WebhookReadEvent) error {
+func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, senderPsId string, event messenger_entities.WebhookRead) error {
 	return nil
 }
 
 func (m *MessageHandler) SendMessage(context echo.Context) error {
-	auctionId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
-	return m.SendPlayersBidTemplateEvents(context, auctionId)
+	auctionId, err := m.auctionService.GetAuctionIdByLeagueId(context, constants.LEAGUE_ID)
+	if err != nil {
+		return context.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	err = m.SendPlayersBidTemplateEvents(context, auctionId)
+	if err != nil {
+		context.Logger().Errorf("sending auction to users error: %+v", err.Error())
+		return context.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	return context.JSON(http.StatusOK, "ok")
 }
 
 func (m *MessageHandler) SendPlayersBidTemplateEvents(context echo.Context, auctionId uuid.UUID) error {
@@ -193,38 +201,40 @@ func (m *MessageHandler) SendPlayersBidTemplateEvents(context echo.Context, auct
 	return nil
 }
 
-func (m *MessageHandler) GetLatestMessage(context echo.Context) error {
-	userId := uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e")
-	return m.HandleMessengerWebhookPostback(
+func (m *MessageHandler) CreateLeague(context echo.Context) error {
+	leagueId := constants.LEAGUE_ID
+	err := m.leagueService.CreateLeague(context, leagueId, "Field of GGreams")
+	if err != nil {
+		fmt.Printf("error: failed to create league %+v", err)
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	return nil
+}
+
+func (m *MessageHandler) CreateAuction(context echo.Context) error {
+	leagueId := constants.LEAGUE_ID
+	auctionId := uuid.New()
+
+	auction, err := m.auctionService.CreateAuction(
 		context,
-		userId,
-		messenger_entities.WebhookPostbackEvent{
-			Sender: messenger_entities.Id{
-				Id: "peepee",
-			},
-			Postback: messenger_entities.WebhookPostback{
-				Payload: "user_joined",
-			},
-		},
+		auctionId,
+		leagueId,
+		time.Now().UnixMilli(),
+		time.Now().Add(time.Duration(10)*time.Minute).UnixMilli(),
 	)
+	if err != nil {
+		fmt.Printf("error: failed to create auction %+v", err)
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
 
-	// auction, err := m.auctionService.CreateAuction(
-	// 	context,
-	// 	uuid.MustParse("c40d070c-931e-44ae-820b-46d595d9af6e"),
-	// 	uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899"),
-	// 	time.Now().UnixMilli(),
-	// 	time.Now().Add(time.Duration(10)*time.Minute).UnixMilli(),
-	// )
-	// if err != nil {
-	// 	fmt.Printf("error: failed to create auction %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
+	err = m.auctionService.StartAuction(context, auction.Id)
+	if err != nil {
+		fmt.Printf("error: failed to start auction %+v", err)
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
 
-	// err = m.auctionService.StartAuction(context, auction.Id)
-	// if err != nil {
-	// 	fmt.Printf("error: failed to start auction %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
+	return nil
 
 	// // err = m.auctionService.CloseAuction(context, auction.Id)
 	// // if err != nil {
@@ -264,12 +274,6 @@ func (m *MessageHandler) GetLatestMessage(context echo.Context) error {
 	// _, err = m.userService.GetUserByUserId(context, user2Id)
 	// if err != nil {
 	// 	fmt.Printf("error: failed to get user %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// err = m.leagueService.CreateLeague(context, leagueId, "wilbert's league")
-	// if err != nil {
-	// 	fmt.Printf("error: failed to create league %+v", err)
 	// 	return context.JSON(http.StatusNotFound, err.Error())
 	// }
 

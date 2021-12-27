@@ -32,10 +32,6 @@ func generateUserWalletRedisKey(userId uuid.UUID) string {
 	return fmt.Sprintf("wallet:user_id:%v", userId.String())
 }
 
-func generateLeagueMembersRelationshipKey(leagueId uuid.UUID) string {
-	return fmt.Sprintf("relationship:league_to_user:%v", leagueId.String())
-}
-
 func generateSenderPsIdToUserIdRedisKey(senderPsId string) string {
 	return fmt.Sprintf("relationship:sender_ps_id_to_user_id:%v", senderPsId)
 }
@@ -74,32 +70,6 @@ func (u *UserRepo) CreateUser(context echo.Context, userId uuid.UUID, user entit
 	}
 
 	err := u.updateUser(context, userId, redisUserKeyValuePairs)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (u *UserRepo) IsUserMemberOfLeague(context echo.Context, userId uuid.UUID, leagueId uuid.UUID) (bool, error) {
-	isMember, err := u.redisClient.SIsMember(
-		context.Request().Context(),
-		generateLeagueMembersRelationshipKey(leagueId),
-		userId.String(),
-	).Result()
-	if err != nil {
-		return false, fmt.Errorf("failed to check if user is in league: userId: %v, leagueId: %v", userId, leagueId)
-	}
-
-	return isMember, nil
-}
-
-func (u *UserRepo) AddUserToLeague(context echo.Context, userId uuid.UUID, leagueId uuid.UUID) error {
-	_, err := u.redisClient.SAdd(
-		context.Request().Context(),
-		generateLeagueMembersRelationshipKey(leagueId),
-		userId.String(),
-	).Result()
 	if err != nil {
 		return err
 	}

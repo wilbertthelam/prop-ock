@@ -10,17 +10,11 @@ type WebhookEntry struct {
 }
 
 type WebhookEvent struct {
-	Sender   WebhookEventSender
-	Message  WebhookMessageEvent  `json:"message,omitempty"`
-	Postback WebhookPostbackEvent `json:"postback,omitempty"`
-	Read     WebhookReadEvent     `json:"read,omitempty"`
-}
-
-type WebhookMessageEvent struct {
 	Sender    Id
-	Recipient Id
 	Timestamp int64
-	Message   WebhookMessage
+	Message   WebhookMessage  `json:"message,omitempty"`
+	Postback  WebhookPostback `json:"postback,omitempty"`
+	Read      WebhookRead     `json:"read,omitempty"`
 }
 
 type WebhookMessage struct {
@@ -28,20 +22,9 @@ type WebhookMessage struct {
 	Text string
 }
 
-type WebhookPostbackEvent struct {
-	Sender    Id
-	Recipient Id
-	Timestamp int64
-	Postback  WebhookPostback
-}
-
 type WebhookPostback struct {
 	Title   string
 	Payload string
 }
 
-type WebhookReadEvent struct{}
-
-type WebhookEventSender struct {
-	Id string
-}
+type WebhookRead struct{}

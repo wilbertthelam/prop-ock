@@ -5,6 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 	"github.com/wilbertthelam/prop-ock/handlers/health"
 	"github.com/wilbertthelam/prop-ock/handlers/message"
 	"github.com/wilbertthelam/prop-ock/handlers/webview"
@@ -27,6 +28,10 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
+	if l, ok := e.Logger.(*log.Logger); ok {
+		l.SetLevel(log.INFO)
+	}
+
 	healthHandlerModule := modules[health.GetName()].(*health.HealthHandler)
 	messageHandlerModule := modules[message.GetName()].(*message.MessageHandler)
 	webviewHandlerModule := modules[webview.GetName()].(*webview.WebviewHandler)
@@ -34,7 +39,8 @@ func main() {
 	// Routes
 	e.GET("/health", healthHandlerModule.GetHealthCheck)
 	e.POST("/message/send/auction", messageHandlerModule.SendMessage)
-	e.GET("/message/get-latest", messageHandlerModule.GetLatestMessage)
+	e.POST("/message/create/league", messageHandlerModule.CreateLeague)
+	e.POST("/message/create/auction", messageHandlerModule.CreateAuction)
 	e.GET("/message/webhook", messageHandlerModule.VerifyMessengerWebhook)
 	e.POST("/message/webhook", messageHandlerModule.ProcessMessengerWebhook)
 

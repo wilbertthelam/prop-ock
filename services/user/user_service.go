@@ -28,7 +28,7 @@ func (u *UserService) GetUserByUserId(context echo.Context, userId uuid.UUID) (e
 	return u.userRepo.GetUserByUserId(context, userId)
 }
 
-func (u *UserService) InitializeUserAndJoinLeague(context echo.Context, leagueId uuid.UUID, userId uuid.UUID, senderPsId string, name string) error {
+func (u *UserService) InitializeUser(context echo.Context, userId uuid.UUID, senderPsId string, name string) error {
 	// Check if account was already created for new user
 	checkedUserId, err := u.GetUserIdFromSenderPsId(context, senderPsId)
 	if err == nil || checkedUserId != uuid.Nil {
@@ -53,12 +53,6 @@ func (u *UserService) InitializeUserAndJoinLeague(context echo.Context, leagueId
 		return err
 	}
 
-	// Join the league
-	err = u.AddUserToLeague(context, userId, leagueId)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -79,20 +73,6 @@ func (u *UserService) createUser(context echo.Context, userId uuid.UUID, name st
 	}
 
 	return u.userRepo.CreateUser(context, userId, user)
-}
-
-func (u *UserService) AddUserToLeague(context echo.Context, userId uuid.UUID, leagueId uuid.UUID) error {
-	// Verify user isn't already part of the league
-	isUserInLeague, err := u.userRepo.IsUserMemberOfLeague(context, userId, leagueId)
-	if err != nil || isUserInLeague {
-		return err
-	}
-
-	return u.userRepo.AddUserToLeague(context, userId, leagueId)
-}
-
-func (u *UserService) RemoveUserFromLeague(context echo.Context, userId uuid.UUID, leagueId uuid.UUID) error {
-	return nil
 }
 
 func (u *UserService) GetUserWallet(context echo.Context, userId uuid.UUID) (map[uuid.UUID]int64, error) {
@@ -153,13 +133,7 @@ func (u *UserService) SetSenderPsIdToUserIdRelationship(context echo.Context, se
 }
 
 func (u *UserService) GetSenderPsIdFromUserId(context echo.Context, userId uuid.UUID) (string, error) {
-	if userId == uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9") {
-		return "5332466926780473", nil
-	} else if userId == uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed") {
-		return "4928500810545820", nil
-	}
-	// return u.userRepo.GetSenderPsIdFromUserId(context, userId)
-	return "", nil
+	return u.userRepo.GetSenderPsIdFromUserId(context, userId)
 }
 
 func (u *UserService) SetUserIdToSenderPsIdRelationship(context echo.Context, senderPsId string, userId uuid.UUID) error {

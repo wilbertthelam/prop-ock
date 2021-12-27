@@ -61,6 +61,10 @@ func (a *AuctionService) GetAuctionByAuctionId(context echo.Context, auctionId u
 	return a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 }
 
+func (a *AuctionService) GetAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
+	return a.auctionRepo.GetAuctionIdByLeagueId(context, leagueId)
+}
+
 func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID, leagueId uuid.UUID, startTime int64, endTime int64) (entities.Auction, error) {
 	// Check if there's already an existing auction running for this league
 	existingAuctionId, err := a.auctionRepo.GetAuctionIdByLeagueId(context, leagueId)
@@ -69,7 +73,17 @@ func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID
 	}
 
 	if existingAuctionId != uuid.Nil {
-		return entities.Auction{}, fmt.Errorf("an auction is already active for this league: %v", leagueId)
+		// Check the auction status, if it is not finished yet then we don't want to start a new one
+		existingAuction, err := a.GetAuctionByAuctionId(context, existingAuctionId)
+		if err != nil {
+			return entities.Auction{}, err
+		}
+
+		// Only allow us to
+		if existingAuction.Status != entities.AUCTION_STATUS_INVALID &&
+			existingAuction.Status != entities.AUCTION_STATUS_ARCHIVED {
+			return entities.Auction{}, fmt.Errorf("an auction is currently running for this league: %v, auctionId: %v, auctionStatus: %v", leagueId, auctionId, existingAuction.Status)
+		}
 	}
 
 	// Create new auction UUID if not provided
@@ -287,6 +301,11 @@ func (a *AuctionService) CreatePlayerBidTemplateElements(context echo.Context, p
 					Url:                "http://fantasy.wilbs.org/webview/bin",
 					WebviewHeightRatio: "COMPACT",
 					Title:              "Place bid",
+				},
+				{
+					Type:    "postback",
+					Payload: "payloadTest",
+					Title:   "Testing postback button",
 				},
 			},
 		}

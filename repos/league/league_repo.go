@@ -27,6 +27,10 @@ func generateLeagueRedisKey(leagueId uuid.UUID) string {
 	return fmt.Sprintf("league:league_id:%v", leagueId.String())
 }
 
+func generateLeagueMembersRelationshipKey(leagueId uuid.UUID) string {
+	return fmt.Sprintf("relationship:league_to_user:%v", leagueId.String())
+}
+
 func (l *LeagueRepo) GetLeagueByLeagueId(context echo.Context, leagueId uuid.UUID) (entities.League, error) {
 	redisLeague, err := l.redisClient.HGetAll(
 		context.Request().Context(),
@@ -75,4 +79,52 @@ func (l *LeagueRepo) updateLeague(context echo.Context, leagueId uuid.UUID, keyV
 	}
 
 	return nil
+}
+
+func (l *LeagueRepo) IsUserMemberOfLeague(context echo.Context, userId uuid.UUID, leagueId uuid.UUID) (bool, error) {
+	isMember, err := l.redisClient.SIsMember(
+		context.Request().Context(),
+		generateLeagueMembersRelationshipKey(leagueId),
+		userId.String(),
+	).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check if user is in league: userId: %v, leagueId: %v", userId, leagueId)
+	}
+
+	return isMember, nil
+}
+
+func (l *LeagueRepo) AddUserToLeague(context echo.Context, userId uuid.UUID, leagueId uuid.UUID) error {
+	_, err := l.redisClient.SAdd(
+		context.Request().Context(),
+		generateLeagueMembersRelationshipKey(leagueId),
+		userId.String(),
+	).Result()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *LeagueRepo) GetMembersInLeague(context echo.Context, leagueId uuid.UUID) ([]uuid.UUID, error) {
+	stringUserIds, err := l.redisClient.SMembers(
+		context.Request().Context(),
+		generateLeagueMembersRelationshipKey(leagueId),
+	).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users in league: leagueId: %v", leagueId)
+	}
+
+	userIds := make([]uuid.UUID, len(stringUserIds))
+	for index, stringUserId := range stringUserIds {
+		userId, err := uuid.Parse(stringUserId)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse userId from Redis string to uuid: %v", stringUserId)
+		}
+
+		userIds[index] = userId
+	}
+
+	return userIds, nil
 }

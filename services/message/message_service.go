@@ -74,10 +74,10 @@ func (m *MessageService) SendAction(context echo.Context, action entities.Action
 func (m *MessageService) handleBiddingState(context echo.Context, action entities.Action, userId uuid.UUID, event interface{}) error {
 	switch action {
 	case entities.ACTION_SEND_MESSAGE:
-		message := event.(messenger_entities.WebhookMessageEvent)
+		message := event.(messenger_entities.WebhookMessage)
 
 		// If the user is sending a bid, parse it for the bid value
-		if strings.HasPrefix(message.Message.Text, "bid") {
+		if strings.HasPrefix(message.Text, "bid") {
 
 		}
 
