@@ -12,8 +12,6 @@ import (
 )
 
 func main() {
-	modules := LoadModules()
-
 	// Get Port
 	port := os.Getenv("PORT")
 
@@ -32,21 +30,38 @@ func main() {
 		l.SetLevel(log.INFO)
 	}
 
-	healthHandlerModule := modules[health.GetName()].(*health.HealthHandler)
-	messageHandlerModule := modules[message.GetName()].(*message.MessageHandler)
-	webviewHandlerModule := modules[webview.GetName()].(*webview.WebviewHandler)
+	root := InitializeDependencyInjectedModules()
 
 	// Routes
-	e.GET("/health", healthHandlerModule.GetHealthCheck)
-	e.POST("/message/send/auction", messageHandlerModule.SendMessage)
-	e.POST("/message/create/league", messageHandlerModule.CreateLeague)
-	e.POST("/message/create/auction", messageHandlerModule.CreateAuction)
-	e.GET("/message/webhook", messageHandlerModule.VerifyMessengerWebhook)
-	e.POST("/message/webhook", messageHandlerModule.ProcessMessengerWebhook)
+	e.GET("/health", root.healthHandler.GetHealthCheck)
+
+	e.POST("/message/send/auction", root.messageHandler.SendMessage)
+	e.POST("/message/create/league", root.messageHandler.CreateLeague)
+	e.POST("/message/create/auction", root.messageHandler.CreateAuction)
+	e.GET("/message/webhook", root.messageHandler.VerifyMessengerWebhook)
+	e.POST("/message/webhook", root.messageHandler.ProcessMessengerWebhook)
 
 	// Templates
-	e.GET("/webview/bid", webviewHandlerModule.RenderBid)
+	e.GET("/webview/bid", root.webviewHandler.RenderBid)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":" + port))
+}
+
+type Root struct {
+	healthHandler  *health.HealthHandler
+	messageHandler *message.MessageHandler
+	webviewHandler *webview.WebviewHandler
+}
+
+func New(
+	healthHandler *health.HealthHandler,
+	messageHandler *message.MessageHandler,
+	webviewHandler *webview.WebviewHandler,
+) *Root {
+	return &Root{
+		healthHandler,
+		messageHandler,
+		webviewHandler,
+	}
 }
