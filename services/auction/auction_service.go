@@ -298,7 +298,7 @@ func (a *AuctionService) CreatePlayerBidTemplateElements(context echo.Context, p
 			Buttons: []messenger_entities.TemplateDefaultAction{
 				{
 					Type:               "web_url",
-					Url:                "http://fantasy.wilbs.org/webview/bin",
+					Url:                "http://fantasy.wilbs.org/webview/bid",
 					WebviewHeightRatio: "compact",
 					Title:              "Place bid",
 				},
