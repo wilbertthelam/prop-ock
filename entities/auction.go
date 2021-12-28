@@ -28,3 +28,10 @@ type Auction struct {
 	Name        string
 	Notes       string
 }
+
+type AuctionBid struct {
+	Id        uuid.UUID
+	AuctionId uuid.UUID
+	UserId    uuid.UUID
+	PlayerId  string
+}

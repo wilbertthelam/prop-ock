@@ -2,6 +2,7 @@ package auction_service
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -166,6 +167,11 @@ func (a *AuctionService) ArchiveAuction(context echo.Context, auctionId uuid.UUI
 
 // MakeBid sends in a bid for a player by a given user for a specific auction
 func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string, bid int64) error {
+	// Make sure bid is positive
+	if bid < 0 {
+		return fmt.Errorf("bid cannot be negative: %v", bid)
+	}
+
 	// Check if auction is open and is active
 	isAuctionOpen, err := a.ValidateAuctionIsOpen(context, auctionId)
 	if err != nil {
@@ -180,6 +186,10 @@ func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, user
 	if err != nil {
 		return err
 	}
+
+	// TODO: Make sure the player exists
+
+	// TODO: Make sure the user exists
 
 	// Try removing funds from the user wallet
 	hasEnoughFunds, err := a.userService.ValidateUserHasEnoughFunds(context, userId, auction.LeagueId, bid)
@@ -251,15 +261,15 @@ func (a *AuctionService) CreateBidsForAuction(context echo.Context, auctionId uu
 	}
 
 	// Create player bid template item for each player
-	playerBidTemplateElements, err := a.CreatePlayerBidTemplateElements(context, playerIds)
+	playerBidTemplateElementsMap, err := a.CreatePlayerBidTemplateElementsMap(context, playerIds, senderPsIds, auctionId)
 	if err != nil {
 		return nil, err
 	}
 
-	return a.CreatePlayerBidEvents(context, senderPsIds, playerBidTemplateElements)
+	return a.CreatePlayerBidEvents(context, senderPsIds, playerBidTemplateElementsMap)
 }
 
-func (a *AuctionService) CreatePlayerBidEvents(context echo.Context, senderPsIds []string, playerBidTemplateEvents []messenger_entities.TemplateElements) ([]messenger_entities.SendEvent, error) {
+func (a *AuctionService) CreatePlayerBidEvents(context echo.Context, senderPsIds []string, playerBidTemplateElementsMap map[string][]messenger_entities.TemplateElements) ([]messenger_entities.SendEvent, error) {
 	events := make([]messenger_entities.SendEvent, len(senderPsIds))
 	for index, senderPsId := range senderPsIds {
 		sendEvent := messenger_entities.SendEvent{
@@ -271,7 +281,7 @@ func (a *AuctionService) CreatePlayerBidEvents(context echo.Context, senderPsIds
 					Type: "template",
 					Payload: messenger_entities.TemplatePayload{
 						TemplateType: "generic",
-						Elements:     playerBidTemplateEvents,
+						Elements:     playerBidTemplateElementsMap[senderPsId],
 					},
 				},
 			},
@@ -283,35 +293,59 @@ func (a *AuctionService) CreatePlayerBidEvents(context echo.Context, senderPsIds
 	return events, nil
 }
 
-func (a *AuctionService) CreatePlayerBidTemplateElements(context echo.Context, playerIds []string) ([]messenger_entities.TemplateElements, error) {
-	templateElements := make([]messenger_entities.TemplateElements, len(playerIds))
-	for index, playerId := range playerIds {
-		player, err := a.playerService.GetPlayerByPlayerId(context, playerId)
-		if err != nil {
-			return nil, err
+func (a *AuctionService) CreatePlayerBidTemplateElementsMap(context echo.Context, playerIds []string, senderPsIds []string, auctionId uuid.UUID) (map[string][]messenger_entities.TemplateElements, error) {
+	senderPsIdsTemplateElementMap := make(map[string][]messenger_entities.TemplateElements, len(senderPsIds))
+
+	// For performance reasons, keep a map of the players we already retrieved
+	playerMap := make(map[string]*entities.Player)
+
+	for _, senderPsId := range senderPsIds {
+		templateElements := make([]messenger_entities.TemplateElements, len(playerIds))
+
+		for index, playerId := range playerIds {
+			// If the player was already retrieved, grab from the map
+			var player *entities.Player
+			if playerMap[playerId] != nil {
+				player = playerMap[playerId]
+			} else {
+				result, err := a.playerService.GetPlayerByPlayerId(context, playerId)
+				if err != nil {
+					return nil, err
+				}
+				player = &result
+			}
+
+			params := url.Values{}
+			params.Add("auctionId", auctionId.String())
+			params.Add("playerId", playerId)
+			params.Add("senderPsId", senderPsId)
+
+			context.Logger().Info("https://5955-50-35-81-67.ngrok.io/webview/bid/?" + params.Encode())
+
+			templateElement := messenger_entities.TemplateElements{
+				Title:    player.Name,
+				ImageUrl: player.Image,
+				Subtitle: fmt.Sprintf("%v | %v", player.Team, player.Position),
+				Buttons: []messenger_entities.TemplateDefaultAction{
+					{
+						Type:               "web_url",
+						Url:                "https://5955-50-35-81-67.ngrok.io/webview/bid/?" + params.Encode(),
+						WebviewHeightRatio: "compact",
+						Title:              "Place bid",
+					},
+					{
+						Type:    "postback",
+						Payload: "payloadTest",
+						Title:   "Testing postback button",
+					},
+				},
+			}
+
+			templateElements[index] = templateElement
 		}
 
-		templateElement := messenger_entities.TemplateElements{
-			Title:    player.Name,
-			ImageUrl: player.Image,
-			Subtitle: fmt.Sprintf("%v | %v", player.Team, player.Position),
-			Buttons: []messenger_entities.TemplateDefaultAction{
-				{
-					Type:               "web_url",
-					Url:                "http://fantasy.wilbs.org/webview/bid",
-					WebviewHeightRatio: "compact",
-					Title:              "Place bid",
-				},
-				{
-					Type:    "postback",
-					Payload: "payloadTest",
-					Title:   "Testing postback button",
-				},
-			},
-		}
-
-		templateElements[index] = templateElement
+		senderPsIdsTemplateElementMap[senderPsId] = templateElements
 	}
 
-	return templateElements, nil
+	return senderPsIdsTemplateElementMap, nil
 }

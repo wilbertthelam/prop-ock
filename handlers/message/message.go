@@ -151,6 +151,12 @@ func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, se
 			return err
 		}
 
+		// Add starting funds to their wallet
+		_, err = m.userService.AddFundsToUserWallet(context, userId, leagueId, 500)
+		if err != nil {
+			return err
+		}
+
 		break
 	}
 
@@ -214,7 +220,10 @@ func (m *MessageHandler) CreateLeague(context echo.Context) error {
 
 func (m *MessageHandler) CreateAuction(context echo.Context) error {
 	leagueId := constants.LEAGUE_ID
-	auctionId := uuid.New()
+
+	// TODO: revert auction hardcode
+	// auctionId := uuid.New()
+	auctionId := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
 
 	auction, err := m.auctionService.CreateAuction(
 		context,

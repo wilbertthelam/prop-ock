@@ -1,9 +1,9 @@
 package entities
 
 type Player struct {
-	Id       string
-	Name     string
-	Image    string
-	Team     string
-	Position string
+	Id       string `json:"id,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Image    string `json:"image,omitempty"`
+	Team     string `json:"team,omitempty"`
+	Position string `json:"position,omitempty"`
 }

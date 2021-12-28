@@ -28,3 +28,10 @@ type WebhookPostback struct {
 }
 
 type WebhookRead struct{}
+
+type WebhookBidPostBody struct {
+	PlayerId   string `json:"player_id,omitempty"`
+	SenderPsId string `json:"sender_ps_id,omitempty"`
+	AuctionId  string `json:"auction_id,omitempty"`
+	Bid        int64  `json:"bid,omitempty"`
+}
