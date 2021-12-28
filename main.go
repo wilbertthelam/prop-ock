@@ -42,7 +42,8 @@ func main() {
 	e.POST("/message/webhook", root.messageHandler.ProcessMessengerWebhook)
 
 	// Templates
-	e.GET("/webview/bid", root.webviewHandler.RenderBid)
+	e.File("/webview/bid", "public/bid.html")
+	// e.GET("/webview/bid", root.webviewHandler.RenderBid)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":" + port))

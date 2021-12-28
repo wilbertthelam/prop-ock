@@ -299,7 +299,7 @@ func (a *AuctionService) CreatePlayerBidTemplateElements(context echo.Context, p
 				{
 					Type:               "web_url",
 					Url:                "http://fantasy.wilbs.org/webview/bin",
-					WebviewHeightRatio: "COMPACT",
+					WebviewHeightRatio: "compact",
 					Title:              "Place bid",
 				},
 				{

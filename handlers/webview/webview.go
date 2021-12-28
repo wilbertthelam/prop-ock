@@ -1,8 +1,6 @@
 package webview
 
 import (
-	"net/http"
-
 	"github.com/labstack/echo/v4"
 )
 
@@ -17,5 +15,7 @@ func GetName() string {
 }
 
 func (h *WebviewHandler) RenderBid(c echo.Context) error {
-	return c.HTML(http.StatusOK, "<div><title>Place bid</title><body>Hello world!</body></div>")
+	// return c.HTML(http.StatusOK, "<div><title>Place bid</title><body>Hello world!</body></div>")
+	// http.Handle("/", http.FileServer(http.Dir("./static")))
+	return nil
 }
