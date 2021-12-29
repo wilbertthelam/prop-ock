@@ -28,8 +28,8 @@ func generateAuctionRedisKey(auctionId uuid.UUID) string {
 	return fmt.Sprintf("auction:auction_id:%v", auctionId.String())
 }
 
-func generateLeagueToAuctionRelationshipRedisKey(leagueId uuid.UUID) string {
-	return fmt.Sprintf("relationship:league_to_auction:league_id:%v", leagueId.String())
+func generateLeagueToActiveAuctionRelationshipRedisKey(leagueId uuid.UUID) string {
+	return fmt.Sprintf("relationship:league_to_active_auction:league_id:%v", leagueId.String())
 }
 
 func generateBidRedisKey(auctionId uuid.UUID, userId uuid.UUID) string {
@@ -74,11 +74,11 @@ func (a *AuctionRepo) GetAuctionByAuctionId(context echo.Context, auctionId uuid
 	return auction, nil
 }
 
-func (a *AuctionRepo) GetAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
+func (a *AuctionRepo) GetActiveAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
 	// Query Redis for the leagueId
 	auctionId, err := a.redisClient.Get(
 		context.Request().Context(),
-		generateLeagueToAuctionRelationshipRedisKey(leagueId),
+		generateLeagueToActiveAuctionRelationshipRedisKey(leagueId),
 	).Result()
 
 	// If Redis key doesn't exist, then auction doesn't exist
@@ -101,7 +101,7 @@ func (a *AuctionRepo) SetLeagueToAuctionRelationship(context echo.Context, leagu
 	// Upsert the league to auction relationship
 	_, err := a.redisClient.Set(
 		context.Request().Context(),
-		generateLeagueToAuctionRelationshipRedisKey(leagueId),
+		generateLeagueToActiveAuctionRelationshipRedisKey(leagueId),
 		auctionId.String(),
 		0,
 	).Result()

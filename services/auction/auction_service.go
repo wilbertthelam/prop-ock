@@ -43,13 +43,13 @@ func (a *AuctionService) GetAuctionByAuctionId(context echo.Context, auctionId u
 	return a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 }
 
-func (a *AuctionService) GetAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
-	return a.auctionRepo.GetAuctionIdByLeagueId(context, leagueId)
+func (a *AuctionService) GetActiveAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
+	return a.auctionRepo.GetActiveAuctionIdByLeagueId(context, leagueId)
 }
 
 func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID, leagueId uuid.UUID, startTime int64, endTime int64) (entities.Auction, error) {
 	// Check if there's already an existing auction running for this league
-	existingAuctionId, err := a.auctionRepo.GetAuctionIdByLeagueId(context, leagueId)
+	existingAuctionId, err := a.auctionRepo.GetActiveAuctionIdByLeagueId(context, leagueId)
 	if err != nil {
 		return entities.Auction{}, err
 	}

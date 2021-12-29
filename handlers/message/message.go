@@ -167,7 +167,7 @@ func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, sender
 }
 
 func (m *MessageHandler) SendMessage(context echo.Context) error {
-	auctionId, err := m.auctionService.GetAuctionIdByLeagueId(context, constants.LEAGUE_ID)
+	auctionId, err := m.auctionService.GetActiveAuctionIdByLeagueId(context, constants.LEAGUE_ID)
 	if err != nil {
 		return context.JSON(http.StatusInternalServerError, err.Error())
 	}
