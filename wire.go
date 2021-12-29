@@ -6,8 +6,11 @@ package main
 import (
 	"github.com/google/wire"
 	redis_client "github.com/wilbertthelam/prop-ock/db"
+	"github.com/wilbertthelam/prop-ock/handlers/auction"
 	"github.com/wilbertthelam/prop-ock/handlers/health"
+	"github.com/wilbertthelam/prop-ock/handlers/league"
 	"github.com/wilbertthelam/prop-ock/handlers/message"
+	"github.com/wilbertthelam/prop-ock/handlers/player"
 	"github.com/wilbertthelam/prop-ock/handlers/webview"
 	auction_repo "github.com/wilbertthelam/prop-ock/repos/auction"
 	league_repo "github.com/wilbertthelam/prop-ock/repos/league"
@@ -27,6 +30,9 @@ func InitializeDependencyInjectedModules() *Root {
 		health.New,
 		webview.New,
 		message.New,
+		player.New,
+		league.New,
+		auction.New,
 		auction_service.New,
 		callups_service.New,
 		user_service.New,

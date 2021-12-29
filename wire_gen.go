@@ -8,8 +8,11 @@ package main
 
 import (
 	"github.com/wilbertthelam/prop-ock/db"
+	"github.com/wilbertthelam/prop-ock/handlers/auction"
 	"github.com/wilbertthelam/prop-ock/handlers/health"
+	"github.com/wilbertthelam/prop-ock/handlers/league"
 	"github.com/wilbertthelam/prop-ock/handlers/message"
+	"github.com/wilbertthelam/prop-ock/handlers/player"
 	"github.com/wilbertthelam/prop-ock/handlers/webview"
 	"github.com/wilbertthelam/prop-ock/repos/auction"
 	"github.com/wilbertthelam/prop-ock/repos/league"
@@ -40,6 +43,9 @@ func InitializeDependencyInjectedModules() *Root {
 	messageService := message_service.New(auctionService)
 	messageHandler := message.New(auctionService, callupsService, userService, leagueService, messageService)
 	webviewHandler := webview.New(playerService, auctionService, userService)
-	root := New(healthHandler, messageHandler, webviewHandler)
+	auctionHandler := auction.New(auctionService, userService)
+	leagueHandler := league.New(leagueService)
+	playerHandler := player.New(playerService)
+	root := New(healthHandler, messageHandler, webviewHandler, auctionHandler, leagueHandler, playerHandler)
 	return root
 }

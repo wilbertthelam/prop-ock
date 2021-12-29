@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -152,7 +151,7 @@ func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, se
 		}
 
 		// Add starting funds to their wallet
-		_, err = m.userService.AddFundsToUserWallet(context, userId, leagueId, 500)
+		_, err = m.userService.AddFundsToUserWallet(context, userId, leagueId, constants.STARTING_WALLET_AMOUNT)
 		if err != nil {
 			return err
 		}
@@ -207,99 +206,61 @@ func (m *MessageHandler) SendPlayersBidTemplateEvents(context echo.Context, auct
 	return nil
 }
 
-func (m *MessageHandler) CreateLeague(context echo.Context) error {
-	leagueId := constants.LEAGUE_ID
-	err := m.leagueService.CreateLeague(context, leagueId, "Field of GGreams")
-	if err != nil {
-		fmt.Printf("error: failed to create league %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// // err = m.auctionService.CloseAuction(context, auction.Id)
+// // if err != nil {
+// // 	fmt.Printf("error: failed to close auction %+v", err)
+// // 	return context.JSON(http.StatusNotFound, err.Error())
+// // }
 
-	return nil
-}
+// // err = m.auctionService.ArchiveAuction(context, auction.Id)
+// // if err != nil {
+// // 	fmt.Printf("error: failed to archive auction %+v", err)
+// // 	return context.JSON(http.StatusNotFound, err.Error())
+// // }
 
-func (m *MessageHandler) CreateAuction(context echo.Context) error {
-	leagueId := constants.LEAGUE_ID
+// // return context.JSON(http.StatusOK, fmt.Sprintf("latest message - auctionId: %v", auction.Id.String()))
+// leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
+// user1Id := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
+// user2Id := uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")
 
-	// TODO: revert auction hardcode
-	// auctionId := uuid.New()
-	auctionId := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
+// err = m.userService.CreateUser(context, user1Id, "Fred Johnson")
+// if err != nil {
+// 	fmt.Printf("error: failed to create user %+v", err)
+// 	return context.JSON(http.StatusNotFound, err.Error())
+// }
 
-	auction, err := m.auctionService.CreateAuction(
-		context,
-		auctionId,
-		leagueId,
-		time.Now().UnixMilli(),
-		time.Now().Add(time.Duration(10)*time.Minute).UnixMilli(),
-	)
-	if err != nil {
-		fmt.Printf("error: failed to create auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// err = m.userService.CreateUser(context, user2Id, "Bobbi Draper")
+// if err != nil {
+// 	fmt.Printf("error: failed to create user %+v", err)
+// 	return context.JSON(http.StatusNotFound, err.Error())
+// }
 
-	err = m.auctionService.StartAuction(context, auction.Id)
-	if err != nil {
-		fmt.Printf("error: failed to start auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
-	}
+// user1, err := m.userService.GetUserByUserId(context, user1Id)
+// if err != nil {
+// 	fmt.Printf("error: failed to get user %+v", err)
+// 	return context.JSON(http.StatusNotFound, err.Error())
+// }
 
-	return nil
+// _, err = m.userService.GetUserByUserId(context, user2Id)
+// if err != nil {
+// 	fmt.Printf("error: failed to get user %+v", err)
+// 	return context.JSON(http.StatusNotFound, err.Error())
+// }
 
-	// // err = m.auctionService.CloseAuction(context, auction.Id)
-	// // if err != nil {
-	// // 	fmt.Printf("error: failed to close auction %+v", err)
-	// // 	return context.JSON(http.StatusNotFound, err.Error())
-	// // }
+// err = m.userService.AddUserToLeague(context, user1Id, leagueId)
+// if err != nil {
+// 	fmt.Printf("error: failed to add user to league %+v", err)
+// 	return context.JSON(http.StatusNotFound, err.Error())
+// }
 
-	// // err = m.auctionService.ArchiveAuction(context, auction.Id)
-	// // if err != nil {
-	// // 	fmt.Printf("error: failed to archive auction %+v", err)
-	// // 	return context.JSON(http.StatusNotFound, err.Error())
-	// // }
+// err = m.userService.AddUserToLeague(context, user2Id, leagueId)
+// if err != nil {
+// 	fmt.Printf("error: failed to add user to league %+v", err)
+// 	return context.JSON(http.StatusNotFound, err.Error())
+// }
 
-	// // return context.JSON(http.StatusOK, fmt.Sprintf("latest message - auctionId: %v", auction.Id.String()))
-	// leagueId := uuid.MustParse("894098e8-8cfe-4c92-9e32-332aac801899")
-	// user1Id := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
-	// user2Id := uuid.MustParse("242e7749-8816-4053-9fdd-3292e4122fed")
-
-	// err = m.userService.CreateUser(context, user1Id, "Fred Johnson")
-	// if err != nil {
-	// 	fmt.Printf("error: failed to create user %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// err = m.userService.CreateUser(context, user2Id, "Bobbi Draper")
-	// if err != nil {
-	// 	fmt.Printf("error: failed to create user %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// user1, err := m.userService.GetUserByUserId(context, user1Id)
-	// if err != nil {
-	// 	fmt.Printf("error: failed to get user %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// _, err = m.userService.GetUserByUserId(context, user2Id)
-	// if err != nil {
-	// 	fmt.Printf("error: failed to get user %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// err = m.userService.AddUserToLeague(context, user1Id, leagueId)
-	// if err != nil {
-	// 	fmt.Printf("error: failed to add user to league %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// err = m.userService.AddUserToLeague(context, user2Id, leagueId)
-	// if err != nil {
-	// 	fmt.Printf("error: failed to add user to league %+v", err)
-	// 	return context.JSON(http.StatusNotFound, err.Error())
-	// }
-
-	// return context.JSON(http.StatusOK, user1)
-}
+// return context.JSON(http.StatusOK, user1)
+// }
 
 // func (m *MessageHandler) SendMessage(context echo.Context) error {
 // 	// Message state machine

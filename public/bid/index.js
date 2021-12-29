@@ -47,11 +47,16 @@ const numberOnlyReg = /^\d+$/;
     }
   };
 
+  onBidInputKeypress = (event) => {
+    if (event.keyCode === 13) {
+      onPlaceBid();
+    }
+  };
+
   getPlayer = (playerId) => {
     const xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = () => {
       if (xhttp.readyState === XMLHttpRequest.DONE && xhttp.status == 200) {
-        console.log(xhttp.responsetext);
         const { name, position, team, id, image } = JSON.parse(
           xhttp.responseText
         );
@@ -62,7 +67,7 @@ const numberOnlyReg = /^\d+$/;
         document.getElementById("player-image").setAttribute("src", image);
       }
     };
-    xhttp.open("GET", `/webview/player?playerId=${playerId}`, true);
+    xhttp.open("GET", `/api/player?playerId=${playerId}`, true);
     xhttp.send();
   };
 
@@ -72,8 +77,13 @@ const numberOnlyReg = /^\d+$/;
       console.log("sending bid: " + currentBid);
 
       const xhttp = new XMLHttpRequest();
-      xhttp.open("POST", `/webview/bid/make`, true);
+      xhttp.open("POST", `/api/auction/bid`, true);
       xhttp.setRequestHeader("Content-type", "application/json");
+      xhttp.onreadystatechange = () => {
+        if (xhttp.readyState === XMLHttpRequest.DONE && xhttp.status == 200) {
+          showById("bid-placed-success");
+        }
+      };
       xhttp.send(
         JSON.stringify({
           auction_id: auctionId,
@@ -94,5 +104,9 @@ const numberOnlyReg = /^\d+$/;
     document
       .getElementById("bid-input")
       .addEventListener("input", onBidInputType);
+
+    document
+      .getElementById("bid-input")
+      .addEventListener("keypress", onBidInputKeypress);
   };
 })();

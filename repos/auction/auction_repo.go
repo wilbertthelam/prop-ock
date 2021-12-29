@@ -170,6 +170,24 @@ func (a *AuctionRepo) ArchiveAuction(context echo.Context, auctionId uuid.UUID) 
 	return nil
 }
 
+func (a *AuctionRepo) GetBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) (int64, error) {
+	bidString, err := a.redisClient.HGet(
+		context.Request().Context(),
+		generateBidRedisKey(auctionId, userId),
+		playerId,
+	).Result()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get bid: error: %+v, auctionId: %v, userId: %v, playerId %v", err, auctionId, userId, playerId)
+	}
+
+	bid, err := strconv.ParseInt(bidString, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse bid %v, for auction: %v, err: %+v", bidString, auctionId, err)
+	}
+
+	return bid, nil
+}
+
 func (a *AuctionRepo) MakeBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string, bid int64) error {
 	redisBidKeyValuePair := []string{
 		playerId, strconv.FormatInt(bid, 10),

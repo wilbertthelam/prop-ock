@@ -191,18 +191,18 @@ func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, user
 
 	// TODO: Make sure the user exists
 
-	// Try removing funds from the user wallet
-	hasEnoughFunds, err := a.userService.ValidateUserHasEnoughFunds(context, userId, auction.LeagueId, bid)
+	// Try removing funds from the user wallet (validation happens inside user service)
+	_, err = a.userService.RemoveFundsFromUserWallet(context, userId, auction.LeagueId, bid)
 	if err != nil {
 		return err
 	}
 
-	if !hasEnoughFunds {
-		return fmt.Errorf("wallet does not have enough funds to remove value: %v", bid)
-	}
-
 	// Create a bid for the player
 	return a.auctionRepo.MakeBid(context, auctionId, userId, playerId, bid)
+}
+
+func (a *AuctionService) GetBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) (int64, error) {
+	return a.auctionRepo.GetBid(context, auctionId, userId, playerId)
 }
 
 func (a *AuctionService) CancelBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) error {
@@ -216,7 +216,23 @@ func (a *AuctionService) CancelBid(context echo.Context, auctionId uuid.UUID, us
 		return fmt.Errorf("auction is not currently open: %v", auctionId)
 	}
 
-	return nil
+	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
+	if err != nil {
+		return err
+	}
+
+	// Get the prior bid amount
+	bid, err := a.auctionRepo.GetBid(context, auctionId, userId, playerId)
+	if err != nil {
+		return err
+	}
+
+	_, err = a.userService.AddFundsToUserWallet(context, userId, auction.LeagueId, bid)
+	if err != nil {
+		return err
+	}
+
+	return a.auctionRepo.CancelBid(context, auctionId, userId, playerId)
 }
 
 func (a *AuctionService) ValidateAuctionIsOpen(context echo.Context, auctionId uuid.UUID) (bool, error) {
