@@ -40,7 +40,9 @@ func main() {
 
 	// Auction
 	e.POST("/api/auction/create", root.auctionHandler.CreateAuction)
-	e.POST("/api/auction/bid", root.auctionHandler.MakeBid)
+	e.POST("/api/auction/bid/make", root.auctionHandler.MakeBid)
+	e.POST("/api/auction/bid/cancel", root.auctionHandler.CancelBid)
+
 	// e.GET("/auction", root.auctionHandler.GetAuction)
 
 	// League

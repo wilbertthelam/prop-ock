@@ -39,25 +39,6 @@ func GetName() string {
 	return "auction_service"
 }
 
-func (a *AuctionService) PlaceBid(context echo.Context, leagueId uuid.UUID, playerId uuid.UUID, userId uuid.UUID, bid int) error {
-	// Check to see if auction is still going
-
-	// Check if user is in league
-
-	// Check if user has enough value to spend on this bid
-
-	// Check if player is valid
-
-	// Check if bid amount is valid
-	if bid < 0 {
-		return fmt.Errorf("invalid bid less than 0: %d", bid)
-	}
-
-	// Send bid into Redis
-
-	return nil
-}
-
 func (a *AuctionService) GetAuctionByAuctionId(context echo.Context, auctionId uuid.UUID) (entities.Auction, error) {
 	return a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 }
@@ -191,6 +172,16 @@ func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, user
 
 	// TODO: Make sure the user exists
 
+	// Make sure the user hasn't already made a bid
+	existingBid, err := a.GetBid(context, auctionId, userId, playerId)
+	if err != nil {
+		return err
+	}
+
+	if existingBid >= 0 {
+		return fmt.Errorf("an open bid already exists for this player: auctionId: %v, playerId: %v, userId: %v", auctionId, playerId, userId)
+	}
+
 	// Try removing funds from the user wallet (validation happens inside user service)
 	_, err = a.userService.RemoveFundsFromUserWallet(context, userId, auction.LeagueId, bid)
 	if err != nil {
@@ -222,9 +213,14 @@ func (a *AuctionService) CancelBid(context echo.Context, auctionId uuid.UUID, us
 	}
 
 	// Get the prior bid amount
-	bid, err := a.auctionRepo.GetBid(context, auctionId, userId, playerId)
+	bid, err := a.GetBid(context, auctionId, userId, playerId)
 	if err != nil {
 		return err
+	}
+
+	// Check to make sure the bid exists before canceling
+	if bid < 0 {
+		return fmt.Errorf("no bid exists to cancel for this player: auctionId: %v, playerId: %v, userId: %v", auctionId, playerId, userId)
 	}
 
 	_, err = a.userService.AddFundsToUserWallet(context, userId, auction.LeagueId, bid)

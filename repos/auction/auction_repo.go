@@ -176,13 +176,19 @@ func (a *AuctionRepo) GetBid(context echo.Context, auctionId uuid.UUID, userId u
 		generateBidRedisKey(auctionId, userId),
 		playerId,
 	).Result()
+
+	// If Redis key doesn't exist, then bid doesn't exist
+	if err == redis.Nil {
+		return -1, nil
+	}
+
 	if err != nil {
-		return 0, fmt.Errorf("failed to get bid: error: %+v, auctionId: %v, userId: %v, playerId %v", err, auctionId, userId, playerId)
+		return -1, fmt.Errorf("failed to get bid: error: %+v, auctionId: %v, userId: %v, playerId %v", err, auctionId, userId, playerId)
 	}
 
 	bid, err := strconv.ParseInt(bidString, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse bid %v, for auction: %v, err: %+v", bidString, auctionId, err)
+		return -1, fmt.Errorf("failed to parse bid %v, for auction: %v, err: %+v", bidString, auctionId, err)
 	}
 
 	return bid, nil

@@ -77,7 +77,7 @@ const numberOnlyReg = /^\d+$/;
       console.log("sending bid: " + currentBid);
 
       const xhttp = new XMLHttpRequest();
-      xhttp.open("POST", `/api/auction/bid`, true);
+      xhttp.open("POST", `/api/auction/bid/make`, true);
       xhttp.setRequestHeader("Content-type", "application/json");
       xhttp.onreadystatechange = () => {
         if (xhttp.readyState === XMLHttpRequest.DONE && xhttp.status == 200) {
