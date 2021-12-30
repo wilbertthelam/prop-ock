@@ -40,8 +40,10 @@ func main() {
 
 	// Auction
 	e.POST("/api/auction/create", root.auctionHandler.CreateAuction)
+	e.POST("/api/auction/stop", root.auctionHandler.StopAuction)
 	e.POST("/api/auction/bid/make", root.auctionHandler.MakeBid)
 	e.POST("/api/auction/bid/cancel", root.auctionHandler.CancelBid)
+	e.POST("/api/auction/process", root.auctionHandler.ProcessAuction)
 
 	// e.GET("/auction", root.auctionHandler.GetAuction)
 

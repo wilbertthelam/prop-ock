@@ -23,7 +23,3 @@ func New(
 		userService,
 	}
 }
-
-func GetName() string {
-	return "webview"
-}

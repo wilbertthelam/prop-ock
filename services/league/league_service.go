@@ -19,10 +19,6 @@ func New(leagueRepo *league_repo.LeagueRepo) *LeagueService {
 	}
 }
 
-func GetName() string {
-	return "league_service"
-}
-
 func (l *LeagueService) GetLeagueByLeagueId(context echo.Context, leagueId uuid.UUID) (entities.League, error) {
 	return l.leagueRepo.GetLeagueByLeagueId(context, leagueId)
 }

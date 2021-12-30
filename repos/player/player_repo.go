@@ -18,10 +18,6 @@ func New(redisClient *redis.Client) *PlayerRepo {
 	}
 }
 
-func GetName() string {
-	return "player_repo"
-}
-
 func generatePlayerRedisKey(playerId string) string {
 	return fmt.Sprintf("player:player_id:%v", playerId)
 }

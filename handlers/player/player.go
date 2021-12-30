@@ -17,10 +17,6 @@ func New(playerService *player_service.PlayerService) *PlayerHandler {
 	}
 }
 
-func GetName() string {
-	return "player"
-}
-
 func (p *PlayerHandler) GetPlayer(context echo.Context) error {
 	player, err := p.playerService.GetPlayerByPlayerId(context, context.QueryParam("playerId"))
 	if err != nil {

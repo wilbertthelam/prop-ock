@@ -19,10 +19,6 @@ func New(redisClient *redis.Client) *LeagueRepo {
 	}
 }
 
-func GetName() string {
-	return "league_repo"
-}
-
 func generateLeagueRedisKey(leagueId uuid.UUID) string {
 	return fmt.Sprintf("league:league_id:%v", leagueId.String())
 }

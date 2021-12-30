@@ -56,10 +56,6 @@ func New(redisClient *redis.Client) *CallupsService {
 	}
 }
 
-func GetName() string {
-	return "callups_service"
-}
-
 func (c *CallupsService) GetLatestCallups(context echo.Context) error {
 	allTransactions, err := getTransactionsFromMLB("20210901", "20211126")
 	if err != nil {

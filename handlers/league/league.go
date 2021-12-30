@@ -21,10 +21,6 @@ func New(
 	}
 }
 
-func GetName() string {
-	return "league"
-}
-
 func (l *LeagueHandler) GetLeagueCheck(c echo.Context) error {
 	return c.JSON(http.StatusOK, "ok")
 }

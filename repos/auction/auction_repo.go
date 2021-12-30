@@ -1,6 +1,7 @@
 package auction_repo
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -20,10 +21,6 @@ func New(redisClient *redis.Client) *AuctionRepo {
 	}
 }
 
-func GetName() string {
-	return "auction_repo"
-}
-
 func generateAuctionRedisKey(auctionId uuid.UUID) string {
 	return fmt.Sprintf("auction:auction_id:%v", auctionId.String())
 }
@@ -34,6 +31,10 @@ func generateLeagueToActiveAuctionRelationshipRedisKey(leagueId uuid.UUID) strin
 
 func generateBidRedisKey(auctionId uuid.UUID, userId uuid.UUID) string {
 	return fmt.Sprintf("bid:auction_id:%v:user_id:%v", auctionId.String(), userId.String())
+}
+
+func generateAuctionResultsRedisKey(auctionId uuid.UUID) string {
+	return fmt.Sprintf("result:auction_id:%v", auctionId.String())
 }
 
 func (a *AuctionRepo) GetAuctionByAuctionId(context echo.Context, auctionId uuid.UUID) (entities.Auction, error) {
@@ -144,6 +145,19 @@ func (a *AuctionRepo) StartAuction(context echo.Context, auctionId uuid.UUID) er
 	return nil
 }
 
+func (a *AuctionRepo) StopAuction(context echo.Context, auctionId uuid.UUID) error {
+	redisStatusKeyValuePair := []string{
+		"status", strconv.FormatInt(int64(entities.AUCTION_STATUS_STOPPED), 10),
+	}
+
+	err := a.updateAuction(context, auctionId, redisStatusKeyValuePair)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (a *AuctionRepo) CloseAuction(context echo.Context, auctionId uuid.UUID) error {
 	redisStatusKeyValuePair := []string{
 		"status", strconv.FormatInt(int64(entities.AUCTION_STATUS_CLOSED), 10),
@@ -157,17 +171,26 @@ func (a *AuctionRepo) CloseAuction(context echo.Context, auctionId uuid.UUID) er
 	return nil
 }
 
-func (a *AuctionRepo) ArchiveAuction(context echo.Context, auctionId uuid.UUID) error {
-	redisStatusKeyValuePair := []string{
-		"status", strconv.FormatInt(int64(entities.AUCTION_STATUS_ARCHIVED), 10),
-	}
-
-	err := a.updateAuction(context, auctionId, redisStatusKeyValuePair)
+func (a *AuctionRepo) GetAllUserBids(context echo.Context, auctionId uuid.UUID, userId uuid.UUID) (map[string]int64, error) {
+	rawPlayerBids, err := a.redisClient.HGetAll(
+		context.Request().Context(),
+		generateBidRedisKey(auctionId, userId),
+	).Result()
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to get bid: error: %+v, auctionId: %v, userId: %v", err, auctionId, userId)
 	}
 
-	return nil
+	bids := make(map[string]int64)
+	for playerId, bidString := range rawPlayerBids {
+		bid, err := strconv.ParseInt(bidString, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse bid in getting all bids %v, for auction: %v, err: %+v", bidString, auctionId, err)
+		}
+
+		bids[playerId] = bid
+	}
+
+	return bids, nil
 }
 
 func (a *AuctionRepo) GetBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) (int64, error) {
@@ -232,6 +255,29 @@ func (a *AuctionRepo) updateAuction(context echo.Context, auctionId uuid.UUID, k
 	).Result()
 	if err != nil {
 		return fmt.Errorf("failed to update auction fields: error: %+v, auctionId: %v, keyValuePairs: %+v", err, auctionId, keyValuePairs)
+	}
+
+	return nil
+}
+
+// SaveAuctionResults stores the processed result of the auction into the DB
+func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUID, playerBidMap map[string][]entities.AuctionBid) error {
+	serializedPlayerBidMap := make(map[string]string)
+	for playerId, bid := range playerBidMap {
+		serializedBid, err := json.Marshal(bid)
+		if err != nil {
+			return err
+		}
+		serializedPlayerBidMap[playerId] = string(serializedBid)
+	}
+
+	_, err := a.redisClient.HSet(
+		context.Request().Context(),
+		generateAuctionResultsRedisKey(auctionId),
+		serializedPlayerBidMap,
+	).Result()
+	if err != nil {
+		return fmt.Errorf("failed to update auction fields: error: %+v, auctionId: %v, playerBidMap: %+v", err, auctionId, playerBidMap)
 	}
 
 	return nil

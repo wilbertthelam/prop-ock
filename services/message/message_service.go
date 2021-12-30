@@ -48,10 +48,6 @@ func New(auctionService *auction_service.AuctionService) *MessageService {
 	}
 }
 
-func GetName() string {
-	return "message_service"
-}
-
 func (m *MessageService) SendAction(context echo.Context, action entities.Action, userId uuid.UUID, event interface{}) error {
 	switch m.state.Get(userId) {
 	case entities.STATE_AUCTION_OPENED:

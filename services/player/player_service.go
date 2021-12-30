@@ -16,10 +16,6 @@ func New(playerRepo *player_repo.PlayerRepo) *PlayerService {
 	}
 }
 
-func GetName() string {
-	return "player_service"
-}
-
 func (p *PlayerService) GetPlayerByPlayerId(context echo.Context, playerId string) (entities.Player, error) {
 	// return p.playerRepo.GetPlayerByPlayerId(context, playerId)
 

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/wilbertthelam/prop-ock/constants"
+	"github.com/wilbertthelam/prop-ock/entities"
 	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
@@ -27,10 +28,6 @@ func New(
 		auctionService,
 		userService,
 	}
-}
-
-func GetName() string {
-	return "auction"
 }
 
 func (a *AuctionHandler) MakeBid(context echo.Context) error {
@@ -106,10 +103,7 @@ func (a *AuctionHandler) CancelBid(context echo.Context) error {
 
 func (a *AuctionHandler) CreateAuction(context echo.Context) error {
 	leagueId := constants.LEAGUE_ID
-
-	// TODO: revert auction hardcode
-	// auctionId := uuid.New()
-	auctionId := uuid.MustParse("5ce0beb6-e12b-42c0-adb4-4153bff08eb9")
+	auctionId := uuid.New()
 
 	auction, err := a.auctionService.CreateAuction(
 		context,
@@ -123,9 +117,51 @@ func (a *AuctionHandler) CreateAuction(context echo.Context) error {
 		return context.JSON(http.StatusNotFound, err.Error())
 	}
 
+	// For now, start auction when we create it
 	err = a.auctionService.StartAuction(context, auction.Id)
 	if err != nil {
 		fmt.Printf("error: failed to start auction %+v", err)
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	return nil
+}
+
+// Close auction stops the auction and prevents bids from coming in
+func (a *AuctionHandler) StopAuction(context echo.Context) error {
+	var body entities.Auction
+
+	err := json.NewDecoder(context.Request().Body).Decode(&body)
+	if err != nil {
+		context.Logger().Error(err)
+		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode close auction body: %+v", err.Error()).Error())
+	}
+
+	auctionId := body.Id
+
+	err = a.auctionService.StopAuction(context, auctionId)
+	if err != nil {
+		fmt.Printf("error: failed to close auction %+v", err)
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	return nil
+}
+
+func (a *AuctionHandler) ProcessAuction(context echo.Context) error {
+	var body entities.Auction
+
+	err := json.NewDecoder(context.Request().Body).Decode(&body)
+	if err != nil {
+		context.Logger().Error(err)
+		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode close auction body: %+v", err.Error()).Error())
+	}
+
+	auctionId := body.Id
+
+	err = a.auctionService.ProcessAuction(context, auctionId)
+	if err != nil {
+		fmt.Printf("error: failed to process auction %+v", err)
 		return context.JSON(http.StatusNotFound, err.Error())
 	}
 

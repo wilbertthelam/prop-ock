@@ -20,10 +20,6 @@ func New(redisClient *redis.Client) *UserRepo {
 	}
 }
 
-func GetName() string {
-	return "user_repo"
-}
-
 func generateUserRedisKey(userId uuid.UUID) string {
 	return fmt.Sprintf("user:user_id:%v", userId.String())
 }

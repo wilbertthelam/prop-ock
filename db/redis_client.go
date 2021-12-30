@@ -14,7 +14,3 @@ func New() *redis.Client {
 
 	return db
 }
-
-func GetName() string {
-	return "redis"
-}

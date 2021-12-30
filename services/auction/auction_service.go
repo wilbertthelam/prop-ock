@@ -35,10 +35,6 @@ func New(
 	}
 }
 
-func GetName() string {
-	return "auction_service"
-}
-
 func (a *AuctionService) GetAuctionByAuctionId(context echo.Context, auctionId uuid.UUID) (entities.Auction, error) {
 	return a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 }
@@ -61,9 +57,9 @@ func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID
 			return entities.Auction{}, err
 		}
 
-		// Only allow us to
+		// Only allow us to create auctions when one is currently not running
 		if existingAuction.Status != entities.AUCTION_STATUS_INVALID &&
-			existingAuction.Status != entities.AUCTION_STATUS_ARCHIVED {
+			existingAuction.Status != entities.AUCTION_STATUS_CLOSED {
 			return entities.Auction{}, fmt.Errorf("an auction is currently running for this league: %v, auctionId: %v, auctionStatus: %v", leagueId, auctionId, existingAuction.Status)
 		}
 	}
@@ -114,6 +110,22 @@ func (a *AuctionService) StartAuction(context echo.Context, auctionId uuid.UUID)
 	return a.auctionRepo.StartAuction(context, auctionId)
 }
 
+// Stop auction
+func (a *AuctionService) StopAuction(context echo.Context, auctionId uuid.UUID) error {
+	// Check if the auction is already created
+	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
+	if err != nil {
+		return err
+	}
+
+	// Auction can only be stopped if it is in the ACTIVE status
+	if auction.Status != entities.AUCTION_STATUS_ACTIVE {
+		return fmt.Errorf("cannot close an auction that's not in active state: %v", auction.Status)
+	}
+
+	return a.auctionRepo.StopAuction(context, auctionId)
+}
+
 // Close auction
 func (a *AuctionService) CloseAuction(context echo.Context, auctionId uuid.UUID) error {
 	// Check if the auction is already created
@@ -122,28 +134,12 @@ func (a *AuctionService) CloseAuction(context echo.Context, auctionId uuid.UUID)
 		return err
 	}
 
-	// Auction can only be closed if it is in the ACTIVE status
-	if auction.Status != entities.AUCTION_STATUS_ACTIVE {
-		return fmt.Errorf("cannot close an auction that's not in active state: %v", auction.Status)
+	// Auction can only be closed if it is in the STOPPED status
+	if auction.Status != entities.AUCTION_STATUS_STOPPED {
+		return fmt.Errorf("cannot archive an auction that's not in stopped state: %v", auction.Status)
 	}
 
 	return a.auctionRepo.CloseAuction(context, auctionId)
-}
-
-// Archive auction
-func (a *AuctionService) ArchiveAuction(context echo.Context, auctionId uuid.UUID) error {
-	// Check if the auction is already created
-	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
-	if err != nil {
-		return err
-	}
-
-	// Auction can only be closed if it is in the CLOSED status
-	if auction.Status != entities.AUCTION_STATUS_CLOSED {
-		return fmt.Errorf("cannot archive an auction that's not in closed state: %v", auction.Status)
-	}
-
-	return a.auctionRepo.ArchiveAuction(context, auctionId)
 }
 
 // MakeBid sends in a bid for a player by a given user for a specific auction
@@ -332,8 +328,6 @@ func (a *AuctionService) CreatePlayerBidTemplateElementsMap(context echo.Context
 			params.Add("playerId", playerId)
 			params.Add("senderPsId", senderPsId)
 
-			context.Logger().Info("https://5955-50-35-81-67.ngrok.io/webview/bid/?" + params.Encode())
-
 			templateElement := messenger_entities.TemplateElements{
 				Title:    player.Name,
 				ImageUrl: player.Image,
@@ -341,7 +335,7 @@ func (a *AuctionService) CreatePlayerBidTemplateElementsMap(context echo.Context
 				Buttons: []messenger_entities.TemplateDefaultAction{
 					{
 						Type:               "web_url",
-						Url:                "https://5955-50-35-81-67.ngrok.io/webview/bid/?" + params.Encode(),
+						Url:                "https://3638-50-35-81-67.ngrok.io/webview/bid/?" + params.Encode(),
 						WebviewHeightRatio: "compact",
 						Title:              "Place bid",
 					},
@@ -360,4 +354,137 @@ func (a *AuctionService) CreatePlayerBidTemplateElementsMap(context echo.Context
 	}
 
 	return senderPsIdsTemplateElementMap, nil
+}
+
+func (a *AuctionService) GetAllUserBids(context echo.Context, auctionId uuid.UUID, userId uuid.UUID) (map[string]int64, error) {
+	return a.auctionRepo.GetAllUserBids(context, auctionId, userId)
+}
+
+func (a *AuctionService) ProcessAuction(context echo.Context, auctionId uuid.UUID) error {
+	// Make sure auction is stopped first
+	// Check if the auction is created
+	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
+	if err != nil {
+		return err
+	}
+
+	// Auction can only be processed if it is in the STOPPED status
+	if auction.Status != entities.AUCTION_STATUS_STOPPED {
+		return fmt.Errorf("cannot close an auction that's not in stopped state: %v", auction.Status)
+	}
+
+	leagueId := auction.LeagueId
+
+	// Get users inside this auction
+	userIds, err := a.leagueService.GetMembersInLeague(context, leagueId)
+	if err != nil {
+		return nil
+	}
+
+	// Create a map keyed on playerId with a value of a list of the highest
+	// bids ({ userId, bid })
+	playerWinningBidsMap := make(map[string][]entities.AuctionBid)
+	playerLosingBidsMap := make(map[string][]entities.AuctionBid)
+
+	for _, userId := range userIds {
+		bids, err := a.GetAllUserBids(context, auctionId, userId)
+		if err != nil {
+			return err
+		}
+
+		for playerId, bid := range bids {
+			auctionBid := entities.AuctionBid{
+				UserId: userId,
+				Bid:    bid,
+			}
+
+			// If no value instantiated yet, then they are the highest bid
+			highBidList, ok := playerWinningBidsMap[playerId]
+			if !ok {
+				playerWinningBidsMap[playerId] = []entities.AuctionBid{auctionBid}
+				continue
+			}
+
+			// The auctionBid list holds all bids which have the highest value (including ties)
+			// If there are more than 1 bid (ties), we'll only have to compare against the first bid
+			currentHighestBid := highBidList[0]
+
+			// If the current highest bids are less than the next bid,
+			// then move the current highest bid into the losing bids map
+			// and we replace the current highest bid with this next bid
+			if currentHighestBid.Bid < bid {
+				playerLosingBids, ok := playerLosingBidsMap[playerId]
+				if !ok {
+					playerLosingBidsMap[playerId] = highBidList
+				} else {
+					playerLosingBidsMap[playerId] = append(playerLosingBids, highBidList...)
+				}
+
+				playerWinningBidsMap[playerId] = []entities.AuctionBid{auctionBid}
+				continue
+			}
+
+			// If the bids are tied, we just add it into the list of highest bids
+			if currentHighestBid.Bid == bid {
+				playerWinningBidsMap[playerId] = append(playerWinningBidsMap[playerId], auctionBid)
+				continue
+			}
+
+			// If the bid is lower than the highest bids, just add it to the losing bids list
+			if currentHighestBid.Bid > bid {
+				playerLosingBids, ok := playerLosingBidsMap[playerId]
+				if !ok {
+					playerLosingBidsMap[playerId] = []entities.AuctionBid{auctionBid}
+				} else {
+					playerLosingBidsMap[playerId] = append(playerLosingBids, auctionBid)
+				}
+			}
+
+		}
+	}
+
+	fmt.Println("list: ")
+	fmt.Println(playerWinningBidsMap)
+	fmt.Println(playerLosingBidsMap)
+
+	// Save the auction results for retrieval
+	err = a.auctionRepo.SaveAuctionResult(context, auctionId, playerWinningBidsMap)
+	if err != nil {
+		return err
+	}
+
+	// Issue refunds for failed bids
+	userTotalRefundAmount := make(map[uuid.UUID]int64)
+	for _, playerBids := range playerLosingBidsMap {
+		for _, playerBid := range playerBids {
+			userId := playerBid.UserId
+			bidAmount := playerBid.Bid
+
+			totalRefundAmount, ok := userTotalRefundAmount[userId]
+			if !ok {
+				userTotalRefundAmount[userId] = bidAmount
+			} else {
+				userTotalRefundAmount[userId] = totalRefundAmount + bidAmount
+			}
+		}
+	}
+
+	fmt.Println(userTotalRefundAmount)
+
+	for userId, bid := range userTotalRefundAmount {
+		updatedFunds, err := a.userService.AddFundsToUserWallet(context, userId, leagueId, bid)
+		if err != nil {
+			return err
+		}
+
+		context.Logger().Infof("updated funds after bid returns: userId: %v, funds: %v", userId, updatedFunds)
+	}
+
+	// Close auction once it's been processed
+	err = a.CloseAuction(context, auctionId)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

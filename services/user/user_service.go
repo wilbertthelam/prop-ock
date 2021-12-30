@@ -20,10 +20,6 @@ func New(userRepo *user_repo.UserRepo) *UserService {
 	}
 }
 
-func GetName() string {
-	return "user_service"
-}
-
 func (u *UserService) GetUserByUserId(context echo.Context, userId uuid.UUID) (entities.User, error) {
 	return u.userRepo.GetUserByUserId(context, userId)
 }
