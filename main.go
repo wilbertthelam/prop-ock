@@ -44,6 +44,7 @@ func main() {
 	e.POST("/api/auction/bid/make", root.auctionHandler.MakeBid)
 	e.POST("/api/auction/bid/cancel", root.auctionHandler.CancelBid)
 	e.POST("/api/auction/process", root.auctionHandler.ProcessAuction)
+	e.GET("/api/auction/current", root.auctionHandler.GetCurrentAuctionForLeague)
 
 	// e.GET("/auction", root.auctionHandler.GetAuction)
 

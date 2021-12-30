@@ -26,7 +26,7 @@ func generateAuctionRedisKey(auctionId uuid.UUID) string {
 }
 
 func generateLeagueToActiveAuctionRelationshipRedisKey(leagueId uuid.UUID) string {
-	return fmt.Sprintf("relationship:league_to_active_auction:league_id:%v", leagueId.String())
+	return fmt.Sprintf("relationship:league_to_current_auction:league_id:%v", leagueId.String())
 }
 
 func generateBidRedisKey(auctionId uuid.UUID, userId uuid.UUID) string {
@@ -75,7 +75,7 @@ func (a *AuctionRepo) GetAuctionByAuctionId(context echo.Context, auctionId uuid
 	return auction, nil
 }
 
-func (a *AuctionRepo) GetActiveAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
+func (a *AuctionRepo) GetCurrentAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
 	// Query Redis for the leagueId
 	auctionId, err := a.redisClient.Get(
 		context.Request().Context(),
@@ -88,11 +88,11 @@ func (a *AuctionRepo) GetActiveAuctionIdByLeagueId(context echo.Context, leagueI
 	}
 
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to get league to auction relationship: error: %+v, auctionId: %v, leagueId: %v", err, auctionId, leagueId)
+		return uuid.Nil, fmt.Errorf("failed to get league to curent auction relationship: error: %+v, auctionId: %v, leagueId: %v", err, auctionId, leagueId)
 	}
 
 	if auctionId == "" {
-		return uuid.Nil, fmt.Errorf("dangling league to auction relationship: leagueId: %v", leagueId)
+		return uuid.Nil, fmt.Errorf("dangling league to current auction relationship: leagueId: %v", leagueId)
 	}
 
 	return uuid.MustParse(auctionId), nil
@@ -262,7 +262,13 @@ func (a *AuctionRepo) updateAuction(context echo.Context, auctionId uuid.UUID, k
 
 // SaveAuctionResults stores the processed result of the auction into the DB
 func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUID, playerBidMap map[string][]entities.AuctionBid) error {
-	serializedPlayerBidMap := make(map[string]string)
+	playerBidMapSize := len(playerBidMap)
+	if playerBidMapSize == 0 {
+		context.Logger().Info("no bids were placed for any players: auctionId: %v", auctionId)
+		return nil
+	}
+
+	serializedPlayerBidMap := make(map[string]string, playerBidMapSize)
 	for playerId, bid := range playerBidMap {
 		serializedBid, err := json.Marshal(bid)
 		if err != nil {
@@ -277,7 +283,7 @@ func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUI
 		serializedPlayerBidMap,
 	).Result()
 	if err != nil {
-		return fmt.Errorf("failed to update auction fields: error: %+v, auctionId: %v, playerBidMap: %+v", err, auctionId, playerBidMap)
+		return fmt.Errorf("failed to save auction results: error: %+v, auctionId: %v, playerBidMap: %+v", err, auctionId, playerBidMap)
 	}
 
 	return nil

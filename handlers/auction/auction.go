@@ -124,7 +124,7 @@ func (a *AuctionHandler) CreateAuction(context echo.Context) error {
 		return context.JSON(http.StatusNotFound, err.Error())
 	}
 
-	return nil
+	return context.JSON(http.StatusOK, "created auction successful")
 }
 
 // Close auction stops the auction and prevents bids from coming in
@@ -145,7 +145,7 @@ func (a *AuctionHandler) StopAuction(context echo.Context) error {
 		return context.JSON(http.StatusNotFound, err.Error())
 	}
 
-	return nil
+	return context.JSON(http.StatusOK, "stopping auction successful")
 }
 
 func (a *AuctionHandler) ProcessAuction(context echo.Context) error {
@@ -165,5 +165,24 @@ func (a *AuctionHandler) ProcessAuction(context echo.Context) error {
 		return context.JSON(http.StatusNotFound, err.Error())
 	}
 
-	return nil
+	return context.JSON(http.StatusOK, "processing auction successful")
+}
+
+func (a *AuctionHandler) GetCurrentAuctionForLeague(context echo.Context) error {
+	leagueId, err := uuid.Parse(context.QueryParam("league_id"))
+	if err != nil {
+		return context.JSON(http.StatusBadRequest, err.Error())
+	}
+
+	activeAuctionId, err := a.auctionService.GetCurrentAuctionIdByLeagueId(context, leagueId)
+	if err != nil {
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	auction, err := a.auctionService.GetAuctionByAuctionId(context, activeAuctionId)
+	if err != nil {
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	return context.JSON(http.StatusOK, auction)
 }

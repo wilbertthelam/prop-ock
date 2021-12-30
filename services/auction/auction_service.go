@@ -39,13 +39,13 @@ func (a *AuctionService) GetAuctionByAuctionId(context echo.Context, auctionId u
 	return a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 }
 
-func (a *AuctionService) GetActiveAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
-	return a.auctionRepo.GetActiveAuctionIdByLeagueId(context, leagueId)
+func (a *AuctionService) GetCurrentAuctionIdByLeagueId(context echo.Context, leagueId uuid.UUID) (uuid.UUID, error) {
+	return a.auctionRepo.GetCurrentAuctionIdByLeagueId(context, leagueId)
 }
 
 func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID, leagueId uuid.UUID, startTime int64, endTime int64) (entities.Auction, error) {
 	// Check if there's already an existing auction running for this league
-	existingAuctionId, err := a.auctionRepo.GetActiveAuctionIdByLeagueId(context, leagueId)
+	existingAuctionId, err := a.auctionRepo.GetCurrentAuctionIdByLeagueId(context, leagueId)
 	if err != nil {
 		return entities.Auction{}, err
 	}
@@ -60,7 +60,7 @@ func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID
 		// Only allow us to create auctions when one is currently not running
 		if existingAuction.Status != entities.AUCTION_STATUS_INVALID &&
 			existingAuction.Status != entities.AUCTION_STATUS_CLOSED {
-			return entities.Auction{}, fmt.Errorf("an auction is currently running for this league: %v, auctionId: %v, auctionStatus: %v", leagueId, auctionId, existingAuction.Status)
+			return entities.Auction{}, fmt.Errorf("an auction is currently running for this league: %v, auctionId: %v, auctionStatus: %v", leagueId, existingAuction.Id, existingAuction.Status)
 		}
 	}
 
@@ -120,7 +120,7 @@ func (a *AuctionService) StopAuction(context echo.Context, auctionId uuid.UUID) 
 
 	// Auction can only be stopped if it is in the ACTIVE status
 	if auction.Status != entities.AUCTION_STATUS_ACTIVE {
-		return fmt.Errorf("cannot close an auction that's not in active state: %v", auction.Status)
+		return fmt.Errorf("cannot stop an auction that's not in active state: %v", auction.Status)
 	}
 
 	return a.auctionRepo.StopAuction(context, auctionId)
@@ -324,9 +324,9 @@ func (a *AuctionService) CreatePlayerBidTemplateElementsMap(context echo.Context
 			}
 
 			params := url.Values{}
-			params.Add("auctionId", auctionId.String())
-			params.Add("playerId", playerId)
-			params.Add("senderPsId", senderPsId)
+			params.Add("auction_id", auctionId.String())
+			params.Add("player_id", playerId)
+			params.Add("sender_ps_id", senderPsId)
 
 			templateElement := messenger_entities.TemplateElements{
 				Title:    player.Name,

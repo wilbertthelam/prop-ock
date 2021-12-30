@@ -18,7 +18,7 @@ func New(playerService *player_service.PlayerService) *PlayerHandler {
 }
 
 func (p *PlayerHandler) GetPlayer(context echo.Context) error {
-	player, err := p.playerService.GetPlayerByPlayerId(context, context.QueryParam("playerId"))
+	player, err := p.playerService.GetPlayerByPlayerId(context, context.QueryParam("player_id"))
 	if err != nil {
 		return context.JSON(http.StatusInternalServerError, err.Error())
 	}

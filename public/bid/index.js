@@ -4,9 +4,9 @@ const numberOnlyReg = /^\d+$/;
   const urlSearchParams = new URLSearchParams(window.location.search);
   const params = Object.fromEntries(urlSearchParams.entries());
 
-  const playerId = params["playerId"] || "";
-  const auctionId = params["auctionId"] || "";
-  const senderPsId = params["senderPsId"] || "";
+  const playerId = params["player_id"] || "";
+  const auctionId = params["auction_id"] || "";
+  const senderPsId = params["sender_ps_id"] || "";
 
   hideById = (id) => {
     document.getElementById(id).style.display = "none";
@@ -67,7 +67,7 @@ const numberOnlyReg = /^\d+$/;
         document.getElementById("player-image").setAttribute("src", image);
       }
     };
-    xhttp.open("GET", `/api/player?playerId=${playerId}`, true);
+    xhttp.open("GET", `/api/player?player_id=${playerId}`, true);
     xhttp.send();
   };
 
