@@ -40,7 +40,7 @@ func InitializeDependencyInjectedModules() *Root {
 	leagueService := league_service.New(leagueRepo)
 	auctionService := auction_service.New(auctionRepo, userService, playerService, leagueService)
 	callupsService := callups_service.New(client)
-	messageService := message_service.New(auctionService)
+	messageService := message_service.New(auctionService, userService, playerService, leagueService)
 	messageHandler := message.New(auctionService, callupsService, userService, leagueService, messageService)
 	webviewHandler := webview.New(playerService, auctionService, userService)
 	auctionHandler := auction.New(auctionService, userService)

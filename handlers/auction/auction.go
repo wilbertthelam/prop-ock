@@ -186,3 +186,17 @@ func (a *AuctionHandler) GetCurrentAuctionForLeague(context echo.Context) error 
 
 	return context.JSON(http.StatusOK, auction)
 }
+
+func (a *AuctionHandler) GetAuctionResults(context echo.Context) error {
+	auctionId, err := uuid.Parse(context.QueryParam("auction_id"))
+	if err != nil {
+		return context.JSON(http.StatusBadRequest, err.Error())
+	}
+
+	auctionResults, err := a.auctionService.GetAuctionResults(context, auctionId)
+	if err != nil {
+		return context.JSON(http.StatusNotFound, err.Error())
+	}
+
+	return context.JSON(http.StatusOK, auctionResults)
+}

@@ -45,7 +45,7 @@ func main() {
 	e.POST("/api/auction/bid/cancel", root.auctionHandler.CancelBid)
 	e.POST("/api/auction/process", root.auctionHandler.ProcessAuction)
 	e.GET("/api/auction/current", root.auctionHandler.GetCurrentAuctionForLeague)
-
+	e.GET("/api/auction/results", root.auctionHandler.GetAuctionResults)
 	// e.GET("/auction", root.auctionHandler.GetAuction)
 
 	// League
@@ -55,7 +55,8 @@ func main() {
 	e.GET("/api/player", root.playerHandler.GetPlayer)
 
 	// Messenger
-	e.POST("/message/auction/send", root.messageHandler.SendMessage)
+	e.POST("/message/auction/players", root.messageHandler.SendPlayersForBidding)
+	e.POST("/message/auction/results", root.messageHandler.SendWinningBids)
 	e.GET("/message/webhook", root.messageHandler.VerifyMessengerWebhook)
 	e.POST("/message/webhook", root.messageHandler.ProcessMessengerWebhook)
 

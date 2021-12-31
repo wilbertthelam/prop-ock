@@ -288,3 +288,26 @@ func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUI
 
 	return nil
 }
+
+func (a *AuctionRepo) GetAuctionResults(context echo.Context, auctionId uuid.UUID) (map[string][]entities.AuctionBid, error) {
+	rawResults, err := a.redisClient.HGetAll(
+		context.Request().Context(),
+		generateAuctionResultsRedisKey(auctionId),
+	).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get auction results: error: %+v, auctionId: %v", err, auctionId)
+	}
+
+	auctionResults := make(map[string][]entities.AuctionBid)
+	for playerId, serializedBid := range rawResults {
+		var auctionBid []entities.AuctionBid
+		err := json.Unmarshal([]byte(serializedBid), &auctionBid)
+		if err != nil {
+			return nil, err
+		}
+
+		auctionResults[playerId] = auctionBid
+	}
+
+	return auctionResults, nil
+}

@@ -162,42 +162,129 @@ func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, sender
 	return nil
 }
 
-func (m *MessageHandler) SendMessage(context echo.Context) error {
+func (m *MessageHandler) SendWinningBids(context echo.Context) error {
 	auctionId, err := m.auctionService.GetCurrentAuctionIdByLeagueId(context, constants.LEAGUE_ID)
 	if err != nil {
 		return context.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	err = m.SendPlayersBidTemplateEvents(context, auctionId)
+	auctionResults, err := m.auctionService.GetAuctionResults(context, auctionId)
 	if err != nil {
-		context.Logger().Errorf("sending auction to users error: %+v", err.Error())
 		return context.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	// For each winning bid, create a success response for it
+	playerEvents := make([]messenger_entities.SendEvent, 0)
+	for _, winningBids := range auctionResults {
+		if len(winningBids) > 1 {
+			// TODO: handle tie case
+		}
+
+		winningBid := winningBids[0]
+
+		playerEvent, err := m.messageService.CreateWinningBidForPlayerEvent(context, winningBid)
+		if err != nil {
+			return context.JSON(http.StatusInternalServerError, err.Error())
+		}
+
+		playerEvent, err = m.attachSenderToEvent(context, winningBid.UserId, playerEvent)
+		if err != nil {
+			return context.JSON(http.StatusInternalServerError, err.Error())
+		}
+
+		playerEvent = m.attachConnectionTagToEvent(context, playerEvent)
+
+		playerEvents = append(playerEvents, playerEvent)
+	}
+
+	// Once all events are generated, send them out
+	errList := m.sendEvents(context, playerEvents)
+	if len(errList) > 0 {
+		context.Logger().Errorf("sending auction results to winners error: %+v", errList)
+		return context.JSON(http.StatusInternalServerError, err)
 	}
 
 	return context.JSON(http.StatusOK, "ok")
 }
 
-func (m *MessageHandler) SendPlayersBidTemplateEvents(context echo.Context, auctionId uuid.UUID) error {
-	sendEvents, err := m.auctionService.CreateBidsForAuction(context, auctionId)
+func (m *MessageHandler) attachConnectionTagToEvent(context echo.Context, event messenger_entities.SendEvent) messenger_entities.SendEvent {
+	// Attached required tags to the event to make sure that we can keep
+	// sending the user messages after 24 hours
+	event.Tag = constants.CONFIRM_TAG_UPDATE
+	return event
+}
+
+func (m *MessageHandler) SendPlayersForBidding(context echo.Context) error {
+	auctionId, err := m.auctionService.GetCurrentAuctionIdByLeagueId(context, constants.LEAGUE_ID)
+	if err != nil {
+		return context.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	sendEvents, err := m.messageService.CreateBidsForAuction(context, auctionId)
 	if err != nil {
 		return context.JSON(http.StatusNotFound, err.Error())
 	}
 
-	for _, sendEvent := range sendEvents {
-		sentEventJSON, _ := json.Marshal(sendEvent)
-
-		postURL := fmt.Sprintf("https://graph.facebook.com/v12.0/me/messages?access_token=%v", secrets.MESSENGER_ACCESS_TOKEN)
-		resp, err := http.Post(postURL, "application/json", bytes.NewBuffer(sentEventJSON))
-
-		context.Logger().Debugf("response: %+v, error: %+v", resp, err)
-
-		if err != nil {
-			// handle error
-			return context.JSON(http.StatusNotFound, err.Error())
-		}
-
-		defer resp.Body.Close()
+	for index, sendEvent := range sendEvents {
+		sendEvent = m.attachConnectionTagToEvent(context, sendEvent)
+		sendEvents[index] = sendEvent
 	}
 
-	return nil
+	errList := m.sendEvents(context, sendEvents)
+	if len(errList) > 0 {
+		context.Logger().Errorf("sending auction to users error: %+v", errList)
+		return context.JSON(http.StatusInternalServerError, err)
+	}
+
+	return context.JSON(http.StatusOK, "ok")
+}
+
+func (m *MessageHandler) attachSenderToEvent(context echo.Context, userId uuid.UUID, event messenger_entities.SendEvent) (messenger_entities.SendEvent, error) {
+	senderPsId, err := m.userService.GetSenderPsIdFromUserId(context, userId)
+	if err != nil {
+		return messenger_entities.SendEvent{}, nil
+	}
+
+	// Attach intended sender the event should be directed towards
+	event.Recipient = messenger_entities.Id{
+		Id: senderPsId,
+	}
+
+	return event, nil
+}
+
+func (m *MessageHandler) sendEvents(context echo.Context, sendEvents []messenger_entities.SendEvent) map[string]error {
+	postURL := fmt.Sprintf("https://graph.facebook.com/v12.0/me/messages?access_token=%v", secrets.MESSENGER_ACCESS_TOKEN)
+
+	errors := make(map[string]error)
+	for _, sendEvent := range sendEvents {
+		sendEventJSON, _ := json.Marshal(sendEvent)
+
+		rawResp, httpErr := http.Post(postURL, "application/json", bytes.NewBuffer(sendEventJSON))
+		context.Logger().Infof("response: %+v, error: %+v", rawResp, httpErr)
+
+		if httpErr != nil {
+			// handle error
+			errors[sendEvent.Recipient.Id] = httpErr
+			continue
+		}
+
+		var resp messenger_entities.SendEventResponse
+		decodeErr := json.NewDecoder(rawResp.Body).Decode(&resp)
+		if decodeErr != nil {
+			context.Logger().Error(decodeErr)
+			errors[sendEvent.Recipient.Id] = decodeErr
+			continue
+		}
+
+		// If the Messenger SendAPI returns an error, give us a heads up
+		if resp.Error.Code > 0 {
+			errors[sendEvent.Recipient.Id] = fmt.Errorf("sendAPI error: %+v", resp.Error)
+			continue
+		}
+
+		defer rawResp.Body.Close()
+	}
+
+	return errors
 }
