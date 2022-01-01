@@ -3,12 +3,15 @@ package auction_repo
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	redis_client "github.com/wilbertthelam/prop-ock/db"
 	"github.com/wilbertthelam/prop-ock/entities"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type AuctionRepo struct {
@@ -43,23 +46,65 @@ func (a *AuctionRepo) GetAuctionByAuctionId(context echo.Context, auctionId uuid
 		context.Request().Context(),
 		generateAuctionRedisKey(auctionId),
 	).Result()
-	if err != nil || redisAuction == nil {
-		return entities.Auction{}, fmt.Errorf("no auction found")
+	if err != nil {
+		return entities.Auction{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get auction",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+			},
+			Err: err,
+		})
+	}
+
+	if len(redisAuction) == 0 {
+		return entities.Auction{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusNotFound,
+			Message: "no auction found",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+			},
+			Err: nil,
+		})
 	}
 
 	startTime, err := strconv.ParseInt(redisAuction["start_time"], 10, 64)
 	if err != nil {
-		return entities.Auction{}, fmt.Errorf("failed to parse start time %v, for auction: %v, err: %+v", redisAuction["start_time"], auctionId, err)
+		return entities.Auction{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to parse start time for auction",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"startTime", redisAuction["start_time"],
+			},
+			Err: err,
+		})
 	}
 
 	endTime, err := strconv.ParseInt(redisAuction["end_time"], 10, 64)
 	if err != nil {
-		return entities.Auction{}, fmt.Errorf("failed to parse end time %v, for auction: %v, err: %+v", redisAuction["end_time"], auctionId, err)
+		return entities.Auction{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to parse end time for auction",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"endTime", redisAuction["end_time"],
+			},
+			Err: err,
+		})
 	}
 
 	status, err := strconv.ParseInt(redisAuction["status"], 10, 64)
 	if err != nil {
-		return entities.Auction{}, fmt.Errorf("failed to parse status %v, for auction: %v, err: %+v", redisAuction["status"], auctionId, err)
+		return entities.Auction{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to parse status for auction",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"status", redisAuction["status"],
+			},
+			Err: err,
+		})
 	}
 
 	auction := entities.Auction{
@@ -84,15 +129,37 @@ func (a *AuctionRepo) GetCurrentAuctionIdByLeagueId(context echo.Context, league
 
 	// If Redis key doesn't exist, then auction doesn't exist
 	if err == redis.Nil {
-		return uuid.Nil, nil
+		return uuid.Nil, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusNotFound,
+			Message: "current auction does not exist for league id",
+			Args: []interface{}{
+				"leagueId", leagueId.String(),
+			},
+			Err: nil,
+		})
 	}
 
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to get league to curent auction relationship: error: %+v, auctionId: %v, leagueId: %v", err, auctionId, leagueId)
+		return uuid.Nil, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusNotFound,
+			Message: "failed to get league to current auction relationship",
+			Args: []interface{}{
+				"leagueId", leagueId.String(),
+				"auctionId", auctionId,
+			},
+			Err: err,
+		})
 	}
 
 	if auctionId == "" {
-		return uuid.Nil, fmt.Errorf("dangling league to current auction relationship: leagueId: %v", leagueId)
+		return uuid.Nil, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "dangling league to current auction relationship",
+			Args: []interface{}{
+				"leagueId", leagueId.String(),
+			},
+			Err: nil,
+		})
 	}
 
 	return uuid.MustParse(auctionId), nil
@@ -100,14 +167,24 @@ func (a *AuctionRepo) GetCurrentAuctionIdByLeagueId(context echo.Context, league
 
 func (a *AuctionRepo) SetLeagueToAuctionRelationship(context echo.Context, leagueId uuid.UUID, auctionId uuid.UUID) error {
 	// Upsert the league to auction relationship
-	_, err := a.redisClient.Set(
-		context.Request().Context(),
-		generateLeagueToActiveAuctionRelationshipRedisKey(leagueId),
-		auctionId.String(),
-		0,
-	).Result()
+	_, err := redis_client.
+		GetCmdable(context, a.redisClient).
+		Set(
+			context.Request().Context(),
+			generateLeagueToActiveAuctionRelationshipRedisKey(leagueId),
+			auctionId.String(),
+			0,
+		).Result()
 	if err != nil {
-		return fmt.Errorf("failed to set create league to auction relationship: error: %+v, auctionId: %v, leagueId: %v", err, auctionId, leagueId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to set league to auction relationship",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"leagueId", leagueId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	return nil
@@ -177,14 +254,30 @@ func (a *AuctionRepo) GetAllUserBids(context echo.Context, auctionId uuid.UUID, 
 		generateBidRedisKey(auctionId, userId),
 	).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bid: error: %+v, auctionId: %v, userId: %v", err, auctionId, userId)
+		return nil, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get all of a user's bids",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	bids := make(map[string]int64)
 	for playerId, bidString := range rawPlayerBids {
 		bid, err := strconv.ParseInt(bidString, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse bid in getting all bids %v, for auction: %v, err: %+v", bidString, auctionId, err)
+			return nil, utils.NewError(utils.ErrorParams{
+				Code:    http.StatusInternalServerError,
+				Message: "failed to parse a bid when trying to get all of a user's bids",
+				Args: []interface{}{
+					"auctionId", auctionId.String(),
+					"userId", userId.String(),
+				},
+				Err: err,
+			})
 		}
 
 		bids[playerId] = bid
@@ -206,12 +299,31 @@ func (a *AuctionRepo) GetBid(context echo.Context, auctionId uuid.UUID, userId u
 	}
 
 	if err != nil {
-		return -1, fmt.Errorf("failed to get bid: error: %+v, auctionId: %v, userId: %v, playerId %v", err, auctionId, userId, playerId)
+		return -1, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get a bid for a player",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+			},
+			Err: err,
+		})
 	}
 
 	bid, err := strconv.ParseInt(bidString, 10, 64)
 	if err != nil {
-		return -1, fmt.Errorf("failed to parse bid %v, for auction: %v, err: %+v", bidString, auctionId, err)
+		return -1, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to parse bid amount for a player",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+				"bid", bidString,
+			},
+			Err: err,
+		})
 	}
 
 	return bid, nil
@@ -222,39 +334,72 @@ func (a *AuctionRepo) MakeBid(context echo.Context, auctionId uuid.UUID, userId 
 		playerId, strconv.FormatInt(bid, 10),
 	}
 
-	_, err := a.redisClient.HSet(
-		context.Request().Context(),
-		generateBidRedisKey(auctionId, userId),
-		redisBidKeyValuePair,
-	).Result()
+	_, err := redis_client.
+		GetCmdable(context, a.redisClient).
+		HSet(
+			context.Request().Context(),
+			generateBidRedisKey(auctionId, userId),
+			redisBidKeyValuePair,
+		).Result()
 	if err != nil {
-		return fmt.Errorf("failed to set bid: error: %+v, auctionId: %v, userId: %v, playerId %v", err, auctionId, userId, playerId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to make a bid",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+				"bid", fmt.Sprintf("%v", bid),
+			},
+			Err: err,
+		})
 	}
 
 	return nil
 }
 
 func (a *AuctionRepo) CancelBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) error {
-	_, err := a.redisClient.HDel(
-		context.Request().Context(),
-		generateBidRedisKey(auctionId, userId),
-		playerId,
-	).Result()
+	_, err := redis_client.
+		GetCmdable(context, a.redisClient).
+		HDel(
+			context.Request().Context(),
+			generateBidRedisKey(auctionId, userId),
+			playerId,
+		).Result()
 	if err != nil {
-		return fmt.Errorf("failed to cancel bid: error: %+v, auctionId: %v, userId: %v, playerId %v", err, auctionId, userId, playerId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to cancel a bid",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+			},
+			Err: err,
+		})
 	}
 
 	return nil
 }
 
 func (a *AuctionRepo) updateAuction(context echo.Context, auctionId uuid.UUID, keyValuePairs []string) error {
-	_, err := a.redisClient.HSet(
-		context.Request().Context(),
-		generateAuctionRedisKey(auctionId),
-		keyValuePairs,
-	).Result()
+	_, err := redis_client.
+		GetCmdable(context, a.redisClient).
+		HSet(
+			context.Request().Context(),
+			generateAuctionRedisKey(auctionId),
+			keyValuePairs,
+		).Result()
 	if err != nil {
-		return fmt.Errorf("failed to update auction fields: error: %+v, auctionId: %v, keyValuePairs: %+v", err, auctionId, keyValuePairs)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to update auction fields",
+			Args: append(
+				[]interface{}{"auctionId", auctionId.String()},
+				utils.MapStringSliceToInterfaceSlice(keyValuePairs)...,
+			),
+			Err: err,
+		})
 	}
 
 	return nil
@@ -264,7 +409,6 @@ func (a *AuctionRepo) updateAuction(context echo.Context, auctionId uuid.UUID, k
 func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUID, playerBidMap map[string][]entities.AuctionBid) error {
 	playerBidMapSize := len(playerBidMap)
 	if playerBidMapSize == 0 {
-		context.Logger().Info("no bids were placed for any players: auctionId: %v", auctionId)
 		return nil
 	}
 
@@ -272,7 +416,15 @@ func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUI
 	for playerId, bid := range playerBidMap {
 		serializedBid, err := json.Marshal(bid)
 		if err != nil {
-			return err
+			return utils.NewError(utils.ErrorParams{
+				Code:    http.StatusInternalServerError,
+				Message: "failed to save marshal player bid in saving auction result",
+				Args: []interface{}{
+					"auctionId", auctionId.String(),
+					"playerId", playerId,
+				},
+				Err: err,
+			})
 		}
 		serializedPlayerBidMap[playerId] = string(serializedBid)
 	}
@@ -283,7 +435,15 @@ func (a *AuctionRepo) SaveAuctionResult(context echo.Context, auctionId uuid.UUI
 		serializedPlayerBidMap,
 	).Result()
 	if err != nil {
-		return fmt.Errorf("failed to save auction results: error: %+v, auctionId: %v, playerBidMap: %+v", err, auctionId, playerBidMap)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to save auction results",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"playerBidMap", fmt.Sprintf("%+v", serializedPlayerBidMap),
+			},
+			Err: err,
+		})
 	}
 
 	return nil
@@ -295,7 +455,14 @@ func (a *AuctionRepo) GetAuctionResults(context echo.Context, auctionId uuid.UUI
 		generateAuctionResultsRedisKey(auctionId),
 	).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get auction results: error: %+v, auctionId: %v", err, auctionId)
+		return nil, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get auction results",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	auctionResults := make(map[string][]entities.AuctionBid)
@@ -303,7 +470,16 @@ func (a *AuctionRepo) GetAuctionResults(context echo.Context, auctionId uuid.UUI
 		var auctionBid []entities.AuctionBid
 		err := json.Unmarshal([]byte(serializedBid), &auctionBid)
 		if err != nil {
-			return nil, err
+			return nil, utils.NewError(utils.ErrorParams{
+				Code:    http.StatusInternalServerError,
+				Message: "failed to unmarshal auction bid in get auction results",
+				Args: []interface{}{
+					"auctionId", auctionId.String(),
+					"playerId", playerId,
+					"serializedBid", serializedBid,
+				},
+				Err: err,
+			})
 		}
 
 		auctionResults[playerId] = auctionBid

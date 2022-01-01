@@ -2,7 +2,6 @@ package auction
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type AuctionHandler struct {
@@ -35,24 +35,24 @@ func (a *AuctionHandler) MakeBid(context echo.Context) error {
 
 	err := json.NewDecoder(context.Request().Body).Decode(&body)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode bid body: %+v", err.Error()).Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to decode make bid body",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
-
-	// Validate all the post body fields
 
 	// Make sure the sender has a userId
 	// Grab userId from the senderPsId
 	userId, err := a.userService.GetUserIdFromSenderPsId(context, body.SenderPsId)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to find user from senderPsId: %v", body.SenderPsId).Error())
+		return utils.JSONError(context, err)
 	}
 
 	auctionId, err := uuid.Parse(body.AuctionId)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to parse auctionId: %v", auctionId).Error())
+		return utils.JSONError(context, err)
 	}
 
 	playerId := body.PlayerId
@@ -60,8 +60,7 @@ func (a *AuctionHandler) MakeBid(context echo.Context) error {
 
 	err = a.auctionService.MakeBid(context, auctionId, userId, playerId, bid)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to make bid: err: %+v, auctionId: %v, userId: %v, playerId: %v, bid: %v", err, auctionId, userId, playerId, bid).Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, "make bid successful")
@@ -72,30 +71,31 @@ func (a *AuctionHandler) CancelBid(context echo.Context) error {
 
 	err := json.NewDecoder(context.Request().Body).Decode(&body)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode bid body: %+v", err.Error()).Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to decode cancel bid body",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	// Make sure the sender has a userId
 	// Grab userId from the senderPsId
 	userId, err := a.userService.GetUserIdFromSenderPsId(context, body.SenderPsId)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to find user from senderPsId: %v", body.SenderPsId).Error())
+		return utils.JSONError(context, err)
 	}
 
 	auctionId, err := uuid.Parse(body.AuctionId)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to parse auctionId: %v", auctionId).Error())
+		return utils.JSONError(context, err)
 	}
 
 	playerId := body.PlayerId
 
 	err = a.auctionService.CancelBid(context, auctionId, userId, playerId)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to cancel bid: auctionId: %v, userId: %v, playerId: %v", auctionId, userId, playerId).Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, "cancel bid successful")
@@ -113,15 +113,13 @@ func (a *AuctionHandler) CreateAuction(context echo.Context) error {
 		time.Now().Add(time.Duration(10)*time.Minute).UnixMilli(),
 	)
 	if err != nil {
-		fmt.Printf("error: failed to create auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	// For now, start auction when we create it
 	err = a.auctionService.StartAuction(context, auction.Id)
 	if err != nil {
-		fmt.Printf("error: failed to start auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, "created auction successful")
@@ -133,16 +131,19 @@ func (a *AuctionHandler) StopAuction(context echo.Context) error {
 
 	err := json.NewDecoder(context.Request().Body).Decode(&body)
 	if err != nil {
-		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode close auction body: %+v", err.Error()).Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to decode stop auction body",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	auctionId := body.Id
 
 	err = a.auctionService.StopAuction(context, auctionId)
 	if err != nil {
-		fmt.Printf("error: failed to close auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, "stopping auction successful")
@@ -154,15 +155,19 @@ func (a *AuctionHandler) ProcessAuction(context echo.Context) error {
 	err := json.NewDecoder(context.Request().Body).Decode(&body)
 	if err != nil {
 		context.Logger().Error(err)
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode close auction body: %+v", err.Error()).Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to close auction body",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	auctionId := body.Id
 
 	err = a.auctionService.ProcessAuction(context, auctionId)
 	if err != nil {
-		fmt.Printf("error: failed to process auction %+v", err)
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, "processing auction successful")
@@ -171,17 +176,22 @@ func (a *AuctionHandler) ProcessAuction(context echo.Context) error {
 func (a *AuctionHandler) GetCurrentAuctionForLeague(context echo.Context) error {
 	leagueId, err := uuid.Parse(context.QueryParam("league_id"))
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, err.Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to get current auction for league params",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	activeAuctionId, err := a.auctionService.GetCurrentAuctionIdByLeagueId(context, leagueId)
 	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	auction, err := a.auctionService.GetAuctionByAuctionId(context, activeAuctionId)
 	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, auction)
@@ -190,12 +200,17 @@ func (a *AuctionHandler) GetCurrentAuctionForLeague(context echo.Context) error 
 func (a *AuctionHandler) GetAuctionResults(context echo.Context) error {
 	auctionId, err := uuid.Parse(context.QueryParam("auction_id"))
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, err.Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to get auction params",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	auctionResults, err := a.auctionService.GetAuctionResults(context, auctionId)
 	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	return context.JSON(http.StatusOK, auctionResults)

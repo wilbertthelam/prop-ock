@@ -14,3 +14,6 @@ const CONFIRM_TAG_UPDATE = "CONFIRMED_EVENT_UPDATE"
 
 const WINNING_BID_TITLE = "You my new owner for only"
 const CLAIM_INSTRUCTIONS = "Go claim me on ESPN. If no good, talk to Addy."
+
+// Key for getting a transaction out of the Echo context
+const TX = "transaction"

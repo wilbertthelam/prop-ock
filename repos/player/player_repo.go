@@ -2,10 +2,12 @@ package player_repo
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/labstack/echo/v4"
 	"github.com/wilbertthelam/prop-ock/entities"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type PlayerRepo struct {
@@ -28,7 +30,14 @@ func (l *PlayerRepo) GetPlayerByPlayerId(context echo.Context, playerId string) 
 		generatePlayerRedisKey(playerId),
 	).Result()
 	if err != nil {
-		return entities.Player{}, fmt.Errorf("failed to get player: %v", playerId)
+		return entities.Player{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get player",
+			Args: []interface{}{
+				"playerId", playerId,
+			},
+			Err: err,
+		})
 	}
 
 	// If player is not found, then return an empty player
@@ -68,7 +77,15 @@ func (l *PlayerRepo) updatePlayer(context echo.Context, playerId string, keyValu
 		keyValuePairs,
 	).Result()
 	if err != nil {
-		return fmt.Errorf("failed to update player fields: error: %+v, playerId: %v, keyValuePairs: %+v", err, playerId, keyValuePairs)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to update player fields",
+			Args: append(
+				[]interface{}{"playerId", playerId},
+				utils.MapStringSliceToInterfaceSlice(keyValuePairs)...,
+			),
+			Err: err,
+		})
 	}
 
 	return nil

@@ -2,14 +2,18 @@ package auction_service
 
 import (
 	"fmt"
+	"net/http"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	redis_client "github.com/wilbertthelam/prop-ock/db"
 	"github.com/wilbertthelam/prop-ock/entities"
 	auction_repo "github.com/wilbertthelam/prop-ock/repos/auction"
 	league_service "github.com/wilbertthelam/prop-ock/services/league"
 	player_service "github.com/wilbertthelam/prop-ock/services/player"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type AuctionService struct {
@@ -17,6 +21,7 @@ type AuctionService struct {
 	userService   *user_service.UserService
 	playerService *player_service.PlayerService
 	leagueService *league_service.LeagueService
+	redisClient   *redis.Client
 }
 
 func New(
@@ -24,12 +29,14 @@ func New(
 	userService *user_service.UserService,
 	playerService *player_service.PlayerService,
 	leagueService *league_service.LeagueService,
+	redisClient *redis.Client,
 ) *AuctionService {
 	return &AuctionService{
 		auctionRepo,
 		userService,
 		playerService,
 		leagueService,
+		redisClient,
 	}
 }
 
@@ -58,20 +65,22 @@ func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID
 		// Only allow us to create auctions when one is currently not running
 		if existingAuction.Status != entities.AUCTION_STATUS_INVALID &&
 			existingAuction.Status != entities.AUCTION_STATUS_CLOSED {
-			return entities.Auction{}, fmt.Errorf("an auction is currently running for this league: %v, auctionId: %v, auctionStatus: %v", leagueId, existingAuction.Id, existingAuction.Status)
+			return entities.Auction{}, utils.NewError(utils.ErrorParams{
+				Code:    http.StatusBadRequest,
+				Message: "an auction is currently running for this league",
+				Args: []interface{}{
+					"auctionId", existingAuction.Id.String(),
+					"leagueId", leagueId.String(),
+					"auctionStatus", fmt.Sprintf("%v", existingAuction.Status),
+				},
+				Err: nil,
+			})
 		}
 	}
 
 	// Create new auction UUID if not provided
 	if auctionId == uuid.Nil {
 		auctionId = uuid.New()
-	}
-
-	// Start Redis transaction here to create auction
-
-	err = a.auctionRepo.SetLeagueToAuctionRelationship(context, leagueId, auctionId)
-	if err != nil {
-		return entities.Auction{}, err
 	}
 
 	// Create the auction object
@@ -84,7 +93,24 @@ func (a *AuctionService) CreateAuction(context echo.Context, auctionId uuid.UUID
 		Status:    entities.AUCTION_STATUS_CREATED,
 	}
 
-	err = a.auctionRepo.CreateAuction(context, auctionId, auction)
+	// Start Redis transaction here to create auction
+	err = redis_client.StartTransaction(
+		context,
+		a.redisClient,
+		func() error {
+			err = a.auctionRepo.SetLeagueToAuctionRelationship(context, leagueId, auctionId)
+			if err != nil {
+				return err
+			}
+
+			err = a.auctionRepo.CreateAuction(context, auctionId, auction)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	)
 	if err != nil {
 		return entities.Auction{}, err
 	}
@@ -102,7 +128,15 @@ func (a *AuctionService) StartAuction(context echo.Context, auctionId uuid.UUID)
 
 	// Auction can only be started if it is in the CREATED status
 	if auction.Status != entities.AUCTION_STATUS_CREATED {
-		return fmt.Errorf("cannot start an auction that's not in created state: %v", auction.Status)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot start an auction that's not in created state",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"auctionStatus", fmt.Sprintf("%v", auction.Status),
+			},
+			Err: nil,
+		})
 	}
 
 	return a.auctionRepo.StartAuction(context, auctionId)
@@ -118,7 +152,15 @@ func (a *AuctionService) StopAuction(context echo.Context, auctionId uuid.UUID) 
 
 	// Auction can only be stopped if it is in the ACTIVE status
 	if auction.Status != entities.AUCTION_STATUS_ACTIVE {
-		return fmt.Errorf("cannot stop an auction that's not in active state: %v", auction.Status)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot stop an auction that's not in active state",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"auctionStatus", fmt.Sprintf("%v", auction.Status),
+			},
+			Err: nil,
+		})
 	}
 
 	return a.auctionRepo.StopAuction(context, auctionId)
@@ -134,7 +176,15 @@ func (a *AuctionService) CloseAuction(context echo.Context, auctionId uuid.UUID)
 
 	// Auction can only be closed if it is in the STOPPED status
 	if auction.Status != entities.AUCTION_STATUS_STOPPED {
-		return fmt.Errorf("cannot archive an auction that's not in stopped state: %v", auction.Status)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot archive an auction that's not in stopped state",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"auctionStatus", fmt.Sprintf("%v", auction.Status),
+			},
+			Err: nil,
+		})
 	}
 
 	return a.auctionRepo.CloseAuction(context, auctionId)
@@ -144,17 +194,37 @@ func (a *AuctionService) CloseAuction(context echo.Context, auctionId uuid.UUID)
 func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string, bid int64) error {
 	// Make sure bid is positive
 	if bid < 0 {
-		return fmt.Errorf("bid cannot be negative: %v", bid)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot make a bid with negative value",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+				"bid", fmt.Sprintf("%v", bid),
+			},
+			Err: nil,
+		})
 	}
 
 	// Check if auction is open and is active
-	isAuctionOpen, err := a.ValidateAuctionIsOpen(context, auctionId)
+	isAuctionOpen, err := a.ValidateAuctionIsActive(context, auctionId)
 	if err != nil {
 		return err
 	}
 
 	if !isAuctionOpen {
-		return fmt.Errorf("auction is not currently open: %v", auctionId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot make bid on a non-active auction",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+				"bid", fmt.Sprintf("%v", bid),
+			},
+			Err: nil,
+		})
 	}
 
 	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
@@ -173,17 +243,35 @@ func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, user
 	}
 
 	if existingBid >= 0 {
-		return fmt.Errorf("an open bid already exists for this player: auctionId: %v, playerId: %v, userId: %v", auctionId, playerId, userId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot make another bids on the same player if bid already exists",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+				"bid", fmt.Sprintf("%v", bid),
+			},
+			Err: nil,
+		})
 	}
 
-	// Try removing funds from the user wallet (validation happens inside user service)
-	_, err = a.userService.RemoveFundsFromUserWallet(context, userId, auction.LeagueId, bid)
-	if err != nil {
-		return err
-	}
+	// Place bid updates in transaction as there are multiple updates
+	// to multiple keys (for the wallet and for the bid item)
+	return redis_client.StartTransaction(
+		context,
+		a.redisClient,
+		func() error {
+			// Try removing funds from the user wallet (validation happens inside user service)
+			_, err = a.userService.RemoveFundsFromUserWallet(context, userId, auction.LeagueId, bid)
+			if err != nil {
+				return err
+			}
 
-	// Create a bid for the player
-	return a.auctionRepo.MakeBid(context, auctionId, userId, playerId, bid)
+			// Create a bid for the player
+			return a.auctionRepo.MakeBid(context, auctionId, userId, playerId, bid)
+		},
+	)
 }
 
 func (a *AuctionService) GetBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) (int64, error) {
@@ -192,13 +280,22 @@ func (a *AuctionService) GetBid(context echo.Context, auctionId uuid.UUID, userI
 
 func (a *AuctionService) CancelBid(context echo.Context, auctionId uuid.UUID, userId uuid.UUID, playerId string) error {
 	// Check if auction is open and is active
-	isAuctionOpen, err := a.ValidateAuctionIsOpen(context, auctionId)
+	isAuctionOpen, err := a.ValidateAuctionIsActive(context, auctionId)
 	if err != nil {
 		return err
 	}
 
 	if !isAuctionOpen {
-		return fmt.Errorf("auction is not currently open: %v", auctionId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot cancel bid on a non-active auction",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+			},
+			Err: nil,
+		})
 	}
 
 	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
@@ -214,7 +311,16 @@ func (a *AuctionService) CancelBid(context echo.Context, auctionId uuid.UUID, us
 
 	// Check to make sure the bid exists before canceling
 	if bid < 0 {
-		return fmt.Errorf("no bid exists to cancel for this player: auctionId: %v, playerId: %v, userId: %v", auctionId, playerId, userId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot cancel bid that doesn't exist for player",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"userId", userId.String(),
+				"playerId", playerId,
+			},
+			Err: nil,
+		})
 	}
 
 	_, err = a.userService.AddFundsToUserWallet(context, userId, auction.LeagueId, bid)
@@ -225,7 +331,7 @@ func (a *AuctionService) CancelBid(context echo.Context, auctionId uuid.UUID, us
 	return a.auctionRepo.CancelBid(context, auctionId, userId, playerId)
 }
 
-func (a *AuctionService) ValidateAuctionIsOpen(context echo.Context, auctionId uuid.UUID) (bool, error) {
+func (a *AuctionService) ValidateAuctionIsActive(context echo.Context, auctionId uuid.UUID) (bool, error) {
 	// Check if auction is open and is active
 	auction, err := a.auctionRepo.GetAuctionByAuctionId(context, auctionId)
 	if err != nil {
@@ -240,6 +346,11 @@ func (a *AuctionService) GetAllUserBids(context echo.Context, auctionId uuid.UUI
 }
 
 func (a *AuctionService) GetAuctionResults(context echo.Context, auctionId uuid.UUID) (map[string][]entities.AuctionBid, error) {
+	_, err := a.GetAuctionByAuctionId(context, auctionId)
+	if err != nil {
+		return nil, err
+	}
+
 	return a.auctionRepo.GetAuctionResults(context, auctionId)
 }
 
@@ -253,7 +364,15 @@ func (a *AuctionService) ProcessAuction(context echo.Context, auctionId uuid.UUI
 
 	// Auction can only be processed if it is in the STOPPED status
 	if auction.Status != entities.AUCTION_STATUS_STOPPED {
-		return fmt.Errorf("cannot close an auction that's not in stopped state: %v", auction.Status)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "cannot close an auction that is not stopped",
+			Args: []interface{}{
+				"auctionId", auctionId.String(),
+				"auctionStatus", fmt.Sprintf("%v", auction.Status),
+			},
+			Err: nil,
+		})
 	}
 
 	leagueId := auction.LeagueId
@@ -349,8 +468,6 @@ func (a *AuctionService) ProcessAuction(context echo.Context, auctionId uuid.UUI
 			}
 		}
 	}
-
-	fmt.Println(userTotalRefundAmount)
 
 	for userId, bid := range userTotalRefundAmount {
 		updatedFunds, err := a.userService.AddFundsToUserWallet(context, userId, leagueId, bid)

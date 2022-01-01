@@ -1,12 +1,12 @@
 package messenger_entities
 
 type WebhookBody struct {
-	Object string
-	Entry  []WebhookEntry
+	Object string         `json:"object,omitempty"`
+	Entry  []WebhookEntry `json:"entry,omitempty"`
 }
 
 type WebhookEntry struct {
-	Messaging []WebhookEvent
+	Messaging []WebhookEvent `json:"messaging,omitempty"`
 }
 
 type WebhookEvent struct {
@@ -18,13 +18,13 @@ type WebhookEvent struct {
 }
 
 type WebhookMessage struct {
-	Mid  string
-	Text string
+	Mid  string `json:"mid,omitempty"`
+	Text string `json:"text,omitempty"`
 }
 
 type WebhookPostback struct {
-	Title   string
-	Payload string
+	Title   string `json:"title,omitempty"`
+	Payload string `json:"payload,omitempty"`
 }
 
 type WebhookRead struct{}

@@ -4,19 +4,31 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	redis_client "github.com/wilbertthelam/prop-ock/db"
 	"github.com/wilbertthelam/prop-ock/entities"
 	user_repo "github.com/wilbertthelam/prop-ock/repos/user"
+	league_service "github.com/wilbertthelam/prop-ock/services/league"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type UserService struct {
-	userRepo *user_repo.UserRepo
+	userRepo      *user_repo.UserRepo
+	leagueService *league_service.LeagueService
+	redisClient   *redis.Client
 }
 
-func New(userRepo *user_repo.UserRepo) *UserService {
+func New(
+	userRepo *user_repo.UserRepo,
+	leagueService *league_service.LeagueService,
+	redisClient *redis.Client,
+) *UserService {
 	return &UserService{
 		userRepo,
+		leagueService,
+		redisClient,
 	}
 }
 
@@ -27,24 +39,46 @@ func (u *UserService) GetUserByUserId(context echo.Context, userId uuid.UUID) (e
 func (u *UserService) InitializeUser(context echo.Context, userId uuid.UUID, senderPsId string, name string) error {
 	// Check if account was already created for new user
 	checkedUserId, err := u.GetUserIdFromSenderPsId(context, senderPsId)
-	if err == nil || checkedUserId != uuid.Nil {
-		return fmt.Errorf("user already mapped: senderPsId: %v, userId: %v, error: %+v", senderPsId, userId, err)
-	}
-
-	// TODO: Create Redis transaction here
-
-	err = u.createUser(context, userId, "[add name]")
-	if err != nil {
-		return context.JSON(http.StatusInternalServerError, err.Error())
-	}
-
-	// Create senderPsId <> userId mappings in both directions
-	err = u.SetUserIdToSenderPsIdRelationship(context, senderPsId, userId)
-	if err != nil {
+	if err == nil {
 		return err
 	}
 
-	err = u.SetSenderPsIdToUserIdRelationship(context, senderPsId, userId)
+	if checkedUserId != uuid.Nil {
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "userId already mapped to senderPsId",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"senderPsId", senderPsId,
+			},
+			Err: nil,
+		})
+	}
+
+	// Start Redis transaction to create user and relationships
+	err = redis_client.StartTransaction(
+		context,
+		u.redisClient,
+		func() error {
+			err = u.createUser(context, userId, "[add name]")
+			if err != nil {
+				return err
+			}
+
+			// Create senderPsId <> userId mappings in both directions
+			err = u.SetUserIdToSenderPsIdRelationship(context, senderPsId, userId)
+			if err != nil {
+				return err
+			}
+
+			err = u.SetSenderPsIdToUserIdRelationship(context, senderPsId, userId)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -60,7 +94,14 @@ func (u *UserService) createUser(context echo.Context, userId uuid.UUID, name st
 	}
 
 	if user.Id != uuid.Nil {
-		return fmt.Errorf("user is already created: %v", userId)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "user is already created",
+			Args: []interface{}{
+				"userId", userId.String(),
+			},
+			Err: nil,
+		})
 	}
 
 	user = entities.User{
@@ -77,12 +118,74 @@ func (u *UserService) GetUserWallet(context echo.Context, userId uuid.UUID) (map
 
 func (u *UserService) AddFundsToUserWallet(context echo.Context, userId uuid.UUID, leagueId uuid.UUID, value int64) (int64, error) {
 	// Verify user exists
+	user, err := u.GetUserByUserId(context, userId)
+	if err != nil {
+		return 0, err
+	}
+
+	if userId != user.Id {
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "user does not exist",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
+	}
 
 	// Verify league exists
+	league, err := u.leagueService.GetLeagueByLeagueId(context, leagueId)
+	if err != nil {
+		return 0, err
+	}
+
+	if leagueId != league.Id {
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "league does not exist",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
+	}
+
+	// Verify user is in league
+	isUserInLeague, err := u.leagueService.IsUserInLeague(context, userId, leagueId)
+	if err != nil {
+		return 0, err
+	}
+
+	if isUserInLeague == false {
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusForbidden,
+			Message: "user does not exist in this league",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
+	}
 
 	// Verify value is positive
 	if value < 0 {
-		return 0, fmt.Errorf("added fund must be a positive value: %v", value)
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "added fund must be a positive value",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
 	}
 
 	return u.userRepo.AddFundsToUserWallet(context, userId, leagueId, value)
@@ -90,12 +193,74 @@ func (u *UserService) AddFundsToUserWallet(context echo.Context, userId uuid.UUI
 
 func (u *UserService) RemoveFundsFromUserWallet(context echo.Context, userId uuid.UUID, leagueId uuid.UUID, value int64) (int64, error) {
 	// Verify user exists
+	user, err := u.GetUserByUserId(context, userId)
+	if err != nil {
+		return 0, err
+	}
+
+	if userId != user.Id {
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "user does not exist",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
+	}
 
 	// Verify league exists
+	league, err := u.leagueService.GetLeagueByLeagueId(context, leagueId)
+	if err != nil {
+		return 0, err
+	}
+
+	if leagueId != league.Id {
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "league does not exist",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
+	}
+
+	// Verify user is in league
+	isUserInLeague, err := u.leagueService.IsUserInLeague(context, userId, leagueId)
+	if err != nil {
+		return 0, err
+	}
+
+	if isUserInLeague == false {
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusForbidden,
+			Message: "user does not exist in this league",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
+	}
 
 	// Verify value is positive
 	if value < 0 {
-		return 0, fmt.Errorf("removed fund must be a positive value: %v", value)
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "removed fund must be a positive value",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
 	}
 
 	// Verify the user has enough funds to remove
@@ -105,7 +270,16 @@ func (u *UserService) RemoveFundsFromUserWallet(context echo.Context, userId uui
 	}
 
 	if !hasEnoughFunds {
-		return 0, fmt.Errorf("wallet does not have enough funds to remove value: %v", value)
+		return 0, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "wallet does not have enough funds to remove value",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+				"value", fmt.Sprintf("%v", value),
+			},
+			Err: nil,
+		})
 	}
 
 	return u.userRepo.RemoveFundsFromUserWallet(context, userId, leagueId, value)

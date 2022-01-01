@@ -3,6 +3,7 @@ package message
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -17,6 +18,7 @@ import (
 	league_service "github.com/wilbertthelam/prop-ock/services/league"
 	message_service "github.com/wilbertthelam/prop-ock/services/message"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type MessageHandler struct {
@@ -50,19 +52,28 @@ func (m *MessageHandler) VerifyMessengerWebhook(context echo.Context) error {
 
 	// Checks if a token and mode is in the query string of the request
 	if mode == "" || token == "" {
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("missing mode or token from Messenger webhook"))
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "missing mode or token from Messenger webhook",
+			Args: []interface{}{
+				"mode", mode,
+				"token", token,
+			},
+			Err: nil,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	// Checks the mode and token sent is correct
 	if mode == "subscribe" && token == secrets.MESSENGER_WEBHOOK_VERIFICATION_TOKEN {
-		fmt.Println("WEBHOOK_VERIFIED")
+		context.Logger().Info("WEBHOOK_VERIFIED")
 
 		// Responds with the challenge token from the request
 		return context.String(http.StatusOK, challenge)
 	}
 
 	// Responds with '403 Forbidden' if verify tokens do not match
-	return context.JSON(http.StatusForbidden, fmt.Errorf("verify token does not match: requested token: %v", token))
+	return context.String(http.StatusForbidden, "tokens do not match")
 }
 
 func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
@@ -70,12 +81,22 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 
 	err := json.NewDecoder(context.Request().Body).Decode(&body)
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, fmt.Errorf("failed to decode body"))
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to decode messenger webhook body",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	// Returns a '404 Not Found' if event is not from a page subscription
 	if body.Object != "page" {
-		return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find page event"))
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusNotFound,
+			Message: "failed to find page event",
+			Err:     nil,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	// Iterates over each entry - there may be multiple if batched
@@ -102,12 +123,16 @@ func (m *MessageHandler) ProcessMessengerWebhook(context echo.Context) error {
 		}
 
 		// Webhook event processed
-		fmt.Println("webhook event processed")
+		context.Logger().Info("webhook event processed")
 	}
 
 	if err != nil {
-		context.Logger().Errorf("webhook processing error: %+v", err.Error())
-		return context.JSON(http.StatusInternalServerError, err.Error())
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "webhook processing error",
+			Err:     err,
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	// Returns a '200 OK' response to all requests
@@ -118,7 +143,7 @@ func (m *MessageHandler) HandleMessengerWebhookMessage(context echo.Context, sen
 	// Grab userId from the senderPsId
 	userId, err := m.userService.GetUserIdFromSenderPsId(context, senderPsId)
 	if err != nil {
-		return context.JSON(http.StatusNotFound, fmt.Errorf("failed to find user from senderPsId"))
+		return err
 	}
 
 	return m.messageService.SendAction(context, entities.ACTION_SEND_MESSAGE, userId, event)
@@ -165,12 +190,12 @@ func (m *MessageHandler) HandleMessengerWebhookRead(context echo.Context, sender
 func (m *MessageHandler) SendWinningBids(context echo.Context) error {
 	auctionId, err := m.auctionService.GetCurrentAuctionIdByLeagueId(context, constants.LEAGUE_ID)
 	if err != nil {
-		return context.JSON(http.StatusInternalServerError, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	auctionResults, err := m.auctionService.GetAuctionResults(context, auctionId)
 	if err != nil {
-		return context.JSON(http.StatusInternalServerError, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	// For each winning bid, create a success response for it
@@ -184,12 +209,12 @@ func (m *MessageHandler) SendWinningBids(context echo.Context) error {
 
 		playerEvent, err := m.messageService.CreateWinningBidForPlayerEvent(context, winningBid)
 		if err != nil {
-			return context.JSON(http.StatusInternalServerError, err.Error())
+			return utils.JSONError(context, err)
 		}
 
 		playerEvent, err = m.attachSenderToEvent(context, winningBid.UserId, playerEvent)
 		if err != nil {
-			return context.JSON(http.StatusInternalServerError, err.Error())
+			return utils.JSONError(context, err)
 		}
 
 		playerEvent = m.attachConnectionTagToEvent(context, playerEvent)
@@ -198,10 +223,19 @@ func (m *MessageHandler) SendWinningBids(context echo.Context) error {
 	}
 
 	// Once all events are generated, send them out
-	errList := m.sendEvents(context, playerEvents)
-	if len(errList) > 0 {
-		context.Logger().Errorf("sending auction results to winners error: %+v", errList)
-		return context.JSON(http.StatusInternalServerError, err)
+	errListMap := m.sendEvents(context, playerEvents)
+	errList := make([]interface{}, len(errListMap))
+	for index, err := range errList {
+		errList[index] = err
+	}
+	if len(errListMap) > 0 {
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to send winning bid events to users on messenger",
+			Args:    errList,
+			Err:     errors.New("error list"),
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	return context.JSON(http.StatusOK, "ok")
@@ -217,12 +251,12 @@ func (m *MessageHandler) attachConnectionTagToEvent(context echo.Context, event 
 func (m *MessageHandler) SendPlayersForBidding(context echo.Context) error {
 	auctionId, err := m.auctionService.GetCurrentAuctionIdByLeagueId(context, constants.LEAGUE_ID)
 	if err != nil {
-		return context.JSON(http.StatusInternalServerError, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	sendEvents, err := m.messageService.CreateBidsForAuction(context, auctionId)
 	if err != nil {
-		return context.JSON(http.StatusNotFound, err.Error())
+		return utils.JSONError(context, err)
 	}
 
 	for index, sendEvent := range sendEvents {
@@ -230,10 +264,20 @@ func (m *MessageHandler) SendPlayersForBidding(context echo.Context) error {
 		sendEvents[index] = sendEvent
 	}
 
-	errList := m.sendEvents(context, sendEvents)
-	if len(errList) > 0 {
-		context.Logger().Errorf("sending auction to users error: %+v", errList)
-		return context.JSON(http.StatusInternalServerError, err)
+	// Once all events are generated, send them out
+	errListMap := m.sendEvents(context, sendEvents)
+	errList := make([]interface{}, len(errListMap))
+	for index, err := range errList {
+		errList[index] = err
+	}
+	if len(errListMap) > 0 {
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to send auction bid events to users on messenger",
+			Args:    errList,
+			Err:     errors.New("error list"),
+		})
+		return utils.JSONError(context, newErr)
 	}
 
 	return context.JSON(http.StatusOK, "ok")
@@ -242,7 +286,7 @@ func (m *MessageHandler) SendPlayersForBidding(context echo.Context) error {
 func (m *MessageHandler) attachSenderToEvent(context echo.Context, userId uuid.UUID, event messenger_entities.SendEvent) (messenger_entities.SendEvent, error) {
 	senderPsId, err := m.userService.GetSenderPsIdFromUserId(context, userId)
 	if err != nil {
-		return messenger_entities.SendEvent{}, nil
+		return messenger_entities.SendEvent{}, err
 	}
 
 	// Attach intended sender the event should be directed towards
@@ -264,22 +308,40 @@ func (m *MessageHandler) sendEvents(context echo.Context, sendEvents []messenger
 		context.Logger().Infof("response: %+v, error: %+v", rawResp, httpErr)
 
 		if httpErr != nil {
-			// handle error
-			errors[sendEvent.Recipient.Id] = httpErr
+			newHttpErr := utils.NewError(utils.ErrorParams{
+				Code:    http.StatusBadRequest,
+				Message: "failed to post send event request",
+				Args: []interface{}{
+					"sendEventJson", string(sendEventJSON),
+				},
+				Err: httpErr,
+			})
+			errors[sendEvent.Recipient.Id] = newHttpErr
 			continue
 		}
 
 		var resp messenger_entities.SendEventResponse
 		decodeErr := json.NewDecoder(rawResp.Body).Decode(&resp)
 		if decodeErr != nil {
-			context.Logger().Error(decodeErr)
-			errors[sendEvent.Recipient.Id] = decodeErr
+			newDecodeErr := utils.NewError(utils.ErrorParams{
+				Code:    http.StatusBadRequest,
+				Message: "failed to decode send event request",
+				Err:     httpErr,
+			})
+			errors[sendEvent.Recipient.Id] = newDecodeErr
 			continue
 		}
 
 		// If the Messenger SendAPI returns an error, give us a heads up
 		if resp.Error.Code > 0 {
-			errors[sendEvent.Recipient.Id] = fmt.Errorf("sendAPI error: %+v", resp.Error)
+			respErr := utils.NewError(utils.ErrorParams{
+				Code:    http.StatusBadRequest,
+				Message: "failed to post send event request",
+				Args: []interface{}{
+					"error", resp.Error,
+				},
+			})
+			errors[sendEvent.Recipient.Id] = respErr
 			continue
 		}
 

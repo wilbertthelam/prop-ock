@@ -36,7 +36,7 @@ func main() {
 	root := InitializeDependencyInjectedModules()
 
 	// Routes
-	e.GET("/api/health", root.healthHandler.GetHealthCheck)
+	e.GET("/health", root.healthHandler.GetHealthCheck)
 
 	// Auction
 	e.POST("/api/auction/create", root.auctionHandler.CreateAuction)

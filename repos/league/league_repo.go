@@ -2,11 +2,13 @@ package league_repo
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/wilbertthelam/prop-ock/entities"
+	"github.com/wilbertthelam/prop-ock/utils"
 )
 
 type LeagueRepo struct {
@@ -24,7 +26,7 @@ func generateLeagueRedisKey(leagueId uuid.UUID) string {
 }
 
 func generateLeagueMembersRelationshipKey(leagueId uuid.UUID) string {
-	return fmt.Sprintf("relationship:league_to_user:%v", leagueId.String())
+	return fmt.Sprintf("relationship:league_to_user:league_id:%v", leagueId.String())
 }
 
 func (l *LeagueRepo) GetLeagueByLeagueId(context echo.Context, leagueId uuid.UUID) (entities.League, error) {
@@ -33,7 +35,14 @@ func (l *LeagueRepo) GetLeagueByLeagueId(context echo.Context, leagueId uuid.UUI
 		generateLeagueRedisKey(leagueId),
 	).Result()
 	if err != nil {
-		return entities.League{}, fmt.Errorf("failed to get league: %v", leagueId)
+		return entities.League{}, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get league",
+			Args: []interface{}{
+				"leagueId", leagueId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	// If league is not found, then return an empty league
@@ -71,7 +80,15 @@ func (l *LeagueRepo) updateLeague(context echo.Context, leagueId uuid.UUID, keyV
 		keyValuePairs,
 	).Result()
 	if err != nil {
-		return fmt.Errorf("failed to update league fields: error: %+v, leagueId: %v, keyValuePairs: %+v", err, leagueId, keyValuePairs)
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to update league fields",
+			Args: append(
+				[]interface{}{"leagueId", leagueId.String()},
+				utils.MapStringSliceToInterfaceSlice(keyValuePairs)...,
+			),
+			Err: err,
+		})
 	}
 
 	return nil
@@ -84,7 +101,15 @@ func (l *LeagueRepo) IsUserMemberOfLeague(context echo.Context, userId uuid.UUID
 		userId.String(),
 	).Result()
 	if err != nil {
-		return false, fmt.Errorf("failed to check if user is in league: userId: %v, leagueId: %v", userId, leagueId)
+		return false, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to check if user is in league",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	return isMember, nil
@@ -97,7 +122,15 @@ func (l *LeagueRepo) AddUserToLeague(context echo.Context, userId uuid.UUID, lea
 		userId.String(),
 	).Result()
 	if err != nil {
-		return err
+		return utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to save marshal player bid in saving auction result",
+			Args: []interface{}{
+				"userId", userId.String(),
+				"leagueId", leagueId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	return nil
@@ -109,14 +142,28 @@ func (l *LeagueRepo) GetMembersInLeague(context echo.Context, leagueId uuid.UUID
 		generateLeagueMembersRelationshipKey(leagueId),
 	).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get users in league: leagueId: %v", leagueId)
+		return nil, utils.NewError(utils.ErrorParams{
+			Code:    http.StatusInternalServerError,
+			Message: "failed to get users in league",
+			Args: []interface{}{
+				"leagueId", leagueId.String(),
+			},
+			Err: err,
+		})
 	}
 
 	userIds := make([]uuid.UUID, len(stringUserIds))
 	for index, stringUserId := range stringUserIds {
 		userId, err := uuid.Parse(stringUserId)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse userId from Redis string to uuid: %v", stringUserId)
+			return nil, utils.NewError(utils.ErrorParams{
+				Code:    http.StatusInternalServerError,
+				Message: "failed to parse userId from Redis string to uuid",
+				Args: []interface{}{
+					"userId", stringUserId,
+				},
+				Err: err,
+			})
 		}
 
 		userIds[index] = userId
