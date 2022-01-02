@@ -54,13 +54,13 @@ func getConfigFromEnvVariables() *Config {
 		Environment: getEnvOrPanic("ENVIRONMENT"),
 		HostUrl:     getEnvOrPanic("HOST_NAME"),
 		Redis: Redis{
-			HostAddress: getEnvOrPanic("HOST_ADDRESS"),
-			Port:        getEnvOrPanic("PORT"),
-			Password:    getEnvOrPanic("PASSWORD"),
+			HostAddress: getEnvOrPanic("REDIS.HOST_ADDRESS"),
+			Port:        getEnvOrPanic("REDIS.PORT"),
+			Password:    getEnvOrPanic("REDIS.PASSWORD"),
 		},
 		Messenger: Messenger{
-			WebhookVerificationToken: getEnvOrPanic("WEBHOOK_VERIFICATION_TOKEN"),
-			AccessToken:              getEnvOrPanic("ACCESS_TOKEN"),
+			WebhookVerificationToken: getEnvOrPanic("MESSENGER.WEBHOOK_VERIFICATION_TOKEN"),
+			AccessToken:              getEnvOrPanic("MESSENGER.ACCESS_TOKEN"),
 		},
 	}
 }
