@@ -1,4 +1,4 @@
-secrets/
+server/secrets/
 
 client/node_modules/
 client/public/build/
