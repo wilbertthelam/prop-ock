@@ -43,6 +43,7 @@ func main() {
 	e.POST("/api/auction/stop", root.auctionHandler.StopAuction)
 	e.POST("/api/auction/bid/make", root.auctionHandler.MakeBid)
 	e.POST("/api/auction/bid/cancel", root.auctionHandler.CancelBid)
+	e.GET("/api/auction/bid", root.auctionHandler.GetBid)
 	e.POST("/api/auction/process", root.auctionHandler.ProcessAuction)
 	e.GET("/api/auction/current", root.auctionHandler.GetCurrentAuctionForLeague)
 	e.GET("/api/auction/results", root.auctionHandler.GetAuctionResults)
@@ -61,7 +62,7 @@ func main() {
 	e.POST("/message/webhook", root.messageHandler.ProcessMessengerWebhook)
 
 	// Webview
-	e.Static("/webview/bid", "public/bid")
+	e.Static("/webview/bid", "client/public")
 
 	// Start server
 	e.Logger.Fatal(e.Start(":" + port))

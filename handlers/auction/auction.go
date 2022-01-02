@@ -30,6 +30,34 @@ func New(
 	}
 }
 
+func (a *AuctionHandler) GetBid(context echo.Context) error {
+	params := context.QueryParams()
+
+	auctionId, err := uuid.Parse(params.Get("auction_id"))
+	if err != nil {
+		newErr := utils.NewError(utils.ErrorParams{
+			Code:    http.StatusBadRequest,
+			Message: "failed to get bid params",
+			Args: []interface{}{
+				"auctionId", context.QueryParam("auction_id"),
+			},
+			Err: err,
+		})
+		return utils.JSONError(context, newErr)
+	}
+
+	// Make sure the sender has a userId
+	// Grab userId from the senderPsId
+	userId, err := a.userService.GetUserIdFromSenderPsId(context, params.Get("sender_ps_id"))
+	if err != nil {
+		return utils.JSONError(context, err)
+	}
+
+	bid, err := a.auctionService.GetBid(context, auctionId, userId, params.Get("player_id"))
+
+	return context.JSON(http.StatusOK, bid)
+}
+
 func (a *AuctionHandler) MakeBid(context echo.Context) error {
 	var body messenger_entities.WebhookBidPostBody
 
