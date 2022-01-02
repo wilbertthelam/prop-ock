@@ -234,8 +234,6 @@ func (a *AuctionService) MakeBid(context echo.Context, auctionId uuid.UUID, user
 
 	// TODO: Make sure the player exists
 
-	// TODO: Make sure the user exists
-
 	// Make sure the user hasn't already made a bid
 	existingBid, err := a.GetBid(context, auctionId, userId, playerId)
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	user_repo "github.com/wilbertthelam/prop-ock/repos/user"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	callups_service "github.com/wilbertthelam/prop-ock/services/callups"
+	config_service "github.com/wilbertthelam/prop-ock/services/config"
 	league_service "github.com/wilbertthelam/prop-ock/services/league"
 	message_service "github.com/wilbertthelam/prop-ock/services/message"
 	player_service "github.com/wilbertthelam/prop-ock/services/player"
@@ -44,6 +45,7 @@ func InitializeDependencyInjectedModules() *Root {
 		player_repo.New,
 		user_repo.New,
 		redis_client.New,
+		config_service.New,
 	)
 
 	return &Root{}

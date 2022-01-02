@@ -12,9 +12,9 @@ import (
 	"github.com/wilbertthelam/prop-ock/constants"
 	"github.com/wilbertthelam/prop-ock/entities"
 	messenger_entities "github.com/wilbertthelam/prop-ock/entities/messenger"
-	"github.com/wilbertthelam/prop-ock/secrets"
 	auction_service "github.com/wilbertthelam/prop-ock/services/auction"
 	callups_service "github.com/wilbertthelam/prop-ock/services/callups"
+	config_service "github.com/wilbertthelam/prop-ock/services/config"
 	league_service "github.com/wilbertthelam/prop-ock/services/league"
 	message_service "github.com/wilbertthelam/prop-ock/services/message"
 	user_service "github.com/wilbertthelam/prop-ock/services/user"
@@ -27,6 +27,7 @@ type MessageHandler struct {
 	userService    *user_service.UserService
 	leagueService  *league_service.LeagueService
 	messageService *message_service.MessageService
+	config         *config_service.Config
 }
 
 func New(
@@ -35,6 +36,7 @@ func New(
 	userService *user_service.UserService,
 	leagueService *league_service.LeagueService,
 	messageService *message_service.MessageService,
+	config *config_service.Config,
 ) *MessageHandler {
 	return &MessageHandler{
 		auctionService,
@@ -42,6 +44,7 @@ func New(
 		userService,
 		leagueService,
 		messageService,
+		config,
 	}
 }
 
@@ -65,7 +68,7 @@ func (m *MessageHandler) VerifyMessengerWebhook(context echo.Context) error {
 	}
 
 	// Checks the mode and token sent is correct
-	if mode == "subscribe" && token == secrets.MESSENGER_WEBHOOK_VERIFICATION_TOKEN {
+	if mode == "subscribe" && token == m.config.GetMessengerConfig().WebhookVerificationToken {
 		context.Logger().Info("WEBHOOK_VERIFIED")
 
 		// Responds with the challenge token from the request
@@ -161,7 +164,6 @@ func (m *MessageHandler) HandleMessengerWebhookPostback(context echo.Context, se
 
 		err := m.userService.InitializeUser(context, userId, senderPsId, "[add-name]")
 		if err != nil {
-			// TODO: figure out what to do if initialization fails
 			return err
 		}
 
@@ -298,7 +300,7 @@ func (m *MessageHandler) attachSenderToEvent(context echo.Context, userId uuid.U
 }
 
 func (m *MessageHandler) sendEvents(context echo.Context, sendEvents []messenger_entities.SendEvent) map[string]error {
-	postURL := fmt.Sprintf("https://graph.facebook.com/v12.0/me/messages?access_token=%v", secrets.MESSENGER_ACCESS_TOKEN)
+	postURL := fmt.Sprintf("https://graph.facebook.com/v12.0/me/messages?access_token=%v", m.config.GetMessengerConfig().AccessToken)
 
 	errors := make(map[string]error)
 	for _, sendEvent := range sendEvents {

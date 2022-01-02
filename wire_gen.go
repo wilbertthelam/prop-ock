@@ -20,6 +20,7 @@ import (
 	"github.com/wilbertthelam/prop-ock/repos/user"
 	"github.com/wilbertthelam/prop-ock/services/auction"
 	"github.com/wilbertthelam/prop-ock/services/callups"
+	"github.com/wilbertthelam/prop-ock/services/config"
 	"github.com/wilbertthelam/prop-ock/services/league"
 	"github.com/wilbertthelam/prop-ock/services/message"
 	"github.com/wilbertthelam/prop-ock/services/player"
@@ -30,7 +31,8 @@ import (
 
 func InitializeDependencyInjectedModules() *Root {
 	healthHandler := health.New()
-	client := redis_client.New()
+	config := config_service.New()
+	client := redis_client.New(config)
 	auctionRepo := auction_repo.New(client)
 	userRepo := user_repo.New(client)
 	leagueRepo := league_repo.New(client)
@@ -41,7 +43,7 @@ func InitializeDependencyInjectedModules() *Root {
 	auctionService := auction_service.New(auctionRepo, userService, playerService, leagueService, client)
 	callupsService := callups_service.New(client)
 	messageService := message_service.New(auctionService, userService, playerService, leagueService)
-	messageHandler := message.New(auctionService, callupsService, userService, leagueService, messageService)
+	messageHandler := message.New(auctionService, callupsService, userService, leagueService, messageService, config)
 	webviewHandler := webview.New(playerService, auctionService, userService)
 	auctionHandler := auction.New(auctionService, userService)
 	leagueHandler := league.New(leagueService)
